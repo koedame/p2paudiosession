@@ -28,4 +28,16 @@ pub enum NetworkError {
 
     #[error("Address parse error: {0}")]
     AddrParse(#[from] std::net::AddrParseError),
+
+    #[error("STUN failed: {0}")]
+    StunFailed(String),
+
+    #[error("Signaling error: {0}")]
+    SignalingError(String),
+
+    #[error("Session full")]
+    SessionFull,
+
+    #[error("Peer not found: {0}")]
+    PeerNotFound(String),
 }
