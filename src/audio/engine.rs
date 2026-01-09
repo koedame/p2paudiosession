@@ -34,6 +34,7 @@ impl Default for AudioConfig {
 }
 
 /// Callback type for captured audio data
+#[allow(dead_code)]
 pub type CaptureCallback = Box<dyn Fn(&[f32], u64) + Send + 'static>;
 
 /// Audio engine handles capture and playback
@@ -44,6 +45,7 @@ pub struct AudioEngine {
     running: Arc<AtomicBool>,
     // Ring buffer for playback: producer is filled by network, consumer is read by audio thread
     playback_producer: Option<ringbuf::HeapProd<f32>>,
+    #[allow(dead_code)]
     playback_consumer: Option<ringbuf::HeapCons<f32>>,
     // Local monitoring
     local_monitor_enabled: Arc<AtomicBool>,
