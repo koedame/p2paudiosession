@@ -43,7 +43,7 @@ Feature: 遅延管理
     Given FECが有効（冗長度10%）
     When 5%のパケットロスが発生する
     Then FECにより大部分のパケットが復元される
-    And 音声の途切れは最小限になる
+    And パケット復元率は90%以上になる
 
   Scenario: パケットロス率が高い場合
     Given FECが有効（冗長度10%）
@@ -114,4 +114,4 @@ Feature: 遅延管理
     Given Windows環境
     And ASIO対応オーディオインターフェースが接続されている
     When ASIOドライバを選択する
-    Then WASAPIより低いデバイス遅延で動作する
+    Then デバイス遅延は3ms以下になる（WASAPI: 典型的に10ms以上）
