@@ -460,44 +460,117 @@ pub struct RecordingInfo {
 
 ```rust
 pub struct MetronomeConfig {
-    pub bpm: f32,           // 20.0 - 300.0
-    pub beats_per_bar: u8,  // 1 - 16
-    pub sample_rate: u32,
+    /// BPM（20-300）
+    pub bpm: u32,
+    /// 拍子の分子（1小節のビート数）
+    pub beats_per_measure: u32,
+    /// 拍子の分母（1ビートを表す音符）
+    pub beat_value: u32,
+    /// クリック音量（0.0-1.0）
+    pub volume: f32,
+    /// ダウンビートのクリック周波数（Hz）
+    pub downbeat_freq: f32,
+    /// その他のビートのクリック周波数（Hz）
+    pub beat_freq: f32,
+}
+
+impl Default for MetronomeConfig {
+    fn default() -> Self {
+        Self {
+            bpm: 120,
+            beats_per_measure: 4,
+            beat_value: 4,
+            volume: 0.5,
+            downbeat_freq: 1000.0,
+            beat_freq: 800.0,
+        }
+    }
 }
 ```
 
-### 11.2 メトロノーム
+### 11.2 メトロノーム状態
+
+```rust
+pub struct MetronomeState {
+    /// 現在のビート位置（0-indexed）
+    pub current_beat: u32,
+    /// 現在の小節番号
+    pub measure: u32,
+    /// 現在のビート内のサンプル位置
+    pub sample_position: u64,
+    /// 開始からの総サンプル数
+    pub total_samples: u64,
+}
+```
+
+### 11.3 メトロノーム
 
 ```rust
 pub struct Metronome {
     config: MetronomeConfig,
-    state: MetronomeState,
+    sample_rate: u32,
+    // ...
 }
 
 impl Metronome {
-    pub fn new(config: MetronomeConfig) -> Self;
+    /// メトロノームを作成
+    pub fn new(config: MetronomeConfig, sample_rate: u32) -> Self;
 
-    /// BPM設定
-    pub fn set_bpm(&mut self, bpm: f32);
+    /// BPM設定（20-300にクランプ）
+    pub fn set_bpm(&mut self, bpm: u32);
+
+    /// 現在のBPM取得
+    pub fn bpm(&self) -> u32;
+
+    /// 音量設定
+    pub fn set_volume(&mut self, volume: f32);
 
     /// 開始
-    pub fn start(&mut self);
+    pub fn start(&self);
 
     /// 停止
-    pub fn stop(&mut self);
+    pub fn stop(&self);
 
-    /// 現在のビート番号取得（0-indexed）
-    pub fn current_beat(&self) -> u8;
+    /// リセット
+    pub fn reset(&self);
 
-    /// クリック音サンプル生成
-    pub fn generate_samples(&mut self, output: &mut [f32]);
+    /// 動作中かどうか
+    pub fn is_running(&self) -> bool;
+
+    /// 現在の状態取得
+    pub fn state(&self) -> MetronomeState;
+
+    /// リモート状態に同期
+    pub fn sync_to(&self, state: MetronomeState);
+
+    /// オーディオサンプル生成
+    pub fn generate(&self, num_samples: usize) -> Vec<f32>;
+
+    /// 既存バッファにミックス
+    pub fn mix_into(&self, buffer: &mut [f32]);
+}
+```
+
+### 11.4 メトロノーム同期（ネットワーク用）
+
+```rust
+pub struct MetronomeSync {
+    pub bpm: u32,
+    pub beats_per_measure: u32,
+    pub current_beat: u32,
+    pub measure: u32,
+    pub sample_position: u64,
 }
 
-/// メトロノーム同期（ネットワーク用）
-pub struct MetronomeSync {
-    pub bpm: f32,
-    pub beat: u8,
-    pub timestamp: u64,
+impl MetronomeSync {
+    /// Metronomeインスタンスから作成
+    pub fn from_metronome(metro: &Metronome) -> Self;
+
+    /// バイト列にシリアライズ
+    pub fn to_bytes(&self) -> Vec<u8>;
+
+    /// バイト列からデシリアライズ
+    pub fn from_bytes(data: &[u8]) -> Option<Self>;
 }
 ```
 

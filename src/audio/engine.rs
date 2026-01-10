@@ -12,7 +12,24 @@ use tracing::{debug, error, info};
 use super::device::DeviceId;
 use super::error::AudioError;
 
-/// Audio configuration
+/// Bit depth for audio samples
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BitDepth {
+    /// 16-bit signed integer
+    I16,
+    /// 24-bit signed integer
+    I24,
+    /// 32-bit floating point
+    F32,
+}
+
+impl Default for BitDepth {
+    fn default() -> Self {
+        BitDepth::F32
+    }
+}
+
+/// Audio configuration (shared base)
 #[derive(Debug, Clone)]
 pub struct AudioConfig {
     /// Sample rate in Hz
@@ -29,6 +46,106 @@ impl Default for AudioConfig {
             sample_rate: 48000,
             channels: 1,
             frame_size: 128,
+        }
+    }
+}
+
+/// Capture configuration
+#[derive(Debug, Clone)]
+pub struct CaptureConfig {
+    /// Sample rate in Hz
+    pub sample_rate: u32,
+    /// Number of channels
+    pub channels: u16,
+    /// Frame size in samples
+    pub frame_size: u32,
+    /// Bit depth
+    pub bit_depth: BitDepth,
+}
+
+impl Default for CaptureConfig {
+    fn default() -> Self {
+        Self {
+            sample_rate: 48000,
+            channels: 1,
+            frame_size: 128,
+            bit_depth: BitDepth::F32,
+        }
+    }
+}
+
+impl From<CaptureConfig> for AudioConfig {
+    fn from(config: CaptureConfig) -> Self {
+        AudioConfig {
+            sample_rate: config.sample_rate,
+            channels: config.channels,
+            frame_size: config.frame_size,
+        }
+    }
+}
+
+/// Playback configuration
+#[derive(Debug, Clone)]
+pub struct PlaybackConfig {
+    /// Sample rate in Hz
+    pub sample_rate: u32,
+    /// Number of channels
+    pub channels: u16,
+    /// Frame size in samples
+    pub frame_size: u32,
+    /// Bit depth
+    pub bit_depth: BitDepth,
+}
+
+impl Default for PlaybackConfig {
+    fn default() -> Self {
+        Self {
+            sample_rate: 48000,
+            channels: 1,
+            frame_size: 128,
+            bit_depth: BitDepth::F32,
+        }
+    }
+}
+
+impl From<PlaybackConfig> for AudioConfig {
+    fn from(config: PlaybackConfig) -> Self {
+        AudioConfig {
+            sample_rate: config.sample_rate,
+            channels: config.channels,
+            frame_size: config.frame_size,
+        }
+    }
+}
+
+/// Audio buffer for samples
+#[derive(Debug, Clone)]
+pub struct AudioBuffer {
+    /// Sample data (interleaved format)
+    pub data: Vec<f32>,
+    /// Number of channels
+    pub channels: u16,
+    /// Number of samples per channel
+    pub samples: u32,
+}
+
+impl AudioBuffer {
+    /// Create a new audio buffer
+    pub fn new(data: Vec<f32>, channels: u16) -> Self {
+        let samples = if channels > 0 {
+            (data.len() / channels as usize) as u32
+        } else {
+            0
+        };
+        Self { data, channels, samples }
+    }
+
+    /// Create an empty buffer
+    pub fn empty(channels: u16, samples: u32) -> Self {
+        Self {
+            data: vec![0.0; (channels as usize) * (samples as usize)],
+            channels,
+            samples,
         }
     }
 }

@@ -1,0 +1,150 @@
+---
+name: sync-spec
+description: Check and synchronize specification documents (docs/) with implementation (src/, src-tauri/, tests/). Detect discrepancies and auto-fix when possible.
+allowed-tools: Read, Glob, Grep, Edit, Write, Bash(cargo:*), AskUserQuestion
+---
+
+# Specification Synchronizer
+
+## Instructions
+
+### Phase 1: Scan Specifications
+
+1. Read all API specs from `docs/api/*.md`
+2. Read architecture from `docs/architecture.md`
+3. Read BDD scenarios from `docs/behavior/*.feature`
+
+For each spec file, extract:
+- Rust code blocks containing `struct`, `enum`, `trait`, `fn` definitions
+- Thread constraints (スレッド: リアルタイム/非リアルタイム/任意)
+- Module structure diagrams
+
+### Phase 2: Scan Implementation
+
+1. Find all Rust files: `src/**/*.rs`, `src-tauri/**/*.rs`
+2. For each file, search for:
+   - `pub struct` definitions
+   - `pub enum` definitions
+   - `pub trait` definitions
+   - `pub fn` definitions
+   - `impl` blocks
+
+3. Find existing tests: `tests/**/*.rs`
+
+### Phase 3: Match and Compare
+
+Use this mapping table:
+
+| Spec File | Implementation Files |
+|-----------|---------------------|
+| docs/api/audio_engine.md | src/audio/engine.rs, src/audio/device.rs, src/audio/effects.rs, src/audio/recording.rs, src/audio/metronome.rs |
+| docs/api/network.md | src/network/connection.rs, src/network/session.rs, src/network/fec.rs, src/network/transport.rs |
+| docs/api/signaling.md | src/network/signaling.rs |
+| docs/api/plugin.md | src/audio/plugin.rs |
+| docs/api/i18n.md | ui/locales/*.json |
+| docs/behavior/*.feature | tests/*.rs |
+
+Compare:
+- Struct names and fields (name, type)
+- Enum variants
+- Trait methods (signature)
+- Function signatures (name, parameters, return type)
+
+### Phase 4: Auto-fix or Ask
+
+#### Auto-fix (high confidence):
+- Missing struct/enum/fn in impl → Add stub to implementation
+- Missing pub item in spec → Add to spec documentation
+- Missing doc comments → Add based on spec description
+- Missing test file → Create test skeleton
+
+#### Ask user (low confidence):
+- Signature differs (design choice needed)
+- Implementation more complex than spec (generics, extra params)
+- Conflicts with ADR decisions
+
+Use AskUserQuestion when unsure (with recommendation):
+- Always provide a recommended option based on project requirements
+- Explain why the recommendation is best
+
+Example:
+- Question: "Signature mismatch for fn start_capture. Which to fix?"
+- Options:
+  1. "Update implementation (Recommended): Spec is source of truth per CLAUDE.md"
+  2. "Update spec: If implementation has better design rationale"
+  3. "Skip: Defer decision"
+
+### Phase 5: Ensure Tests
+
+1. For each `Scenario:` in `docs/behavior/*.feature`:
+   - Map to test file: `connection.feature` → `tests/connection_test.rs`
+   - If test file missing → Create with test skeleton
+   - If scenario not covered → Add test function
+
+2. Test function structure:
+   - Parse `Given` → setup code
+   - Parse `When` → action code
+   - Parse `Then` → assertion
+
+3. Run `cargo test` to verify
+
+---
+
+## Check Rules
+
+### Type Definition Checks
+
+| Check | Action if Failed |
+|-------|-----------------|
+| Struct in spec, missing in impl | Add struct stub to impl |
+| Struct field type mismatch | ASK: Which is correct? |
+| Enum variant missing | Add variant to impl |
+| Trait method missing | Add method stub to impl |
+
+### Function Signature Checks
+
+| Check | Action if Failed |
+|-------|-----------------|
+| Function missing in impl | Add function stub |
+| Parameter count differs | ASK: Design decision |
+| Return type differs | ASK: Design decision |
+| Thread constraint undocumented | Add doc comment |
+
+### Module Structure Checks
+
+| Check | Action if Failed |
+|-------|-----------------|
+| Module file missing | ASK: Create or update spec? |
+| File exists but not in spec | Add to spec module diagram |
+
+### Test Coverage Checks
+
+| Check | Action if Failed |
+|-------|-----------------|
+| No test for scenario | Create test file and function |
+| Test exists but incomplete | Add missing assertions |
+
+---
+
+## Output Format
+
+```
+## Sync Report: [spec_file] <-> [impl_files]
+
+### Auto-fixed
+- [FIXED] description (file:line)
+
+### Needs Confirmation
+- [QUESTION] description
+  - Spec: X
+  - Impl: Y
+
+### Tests Created
+- [TEST] tests/xxx_test.rs - N scenarios covered
+
+### Summary
+- Matched: N items
+- Auto-fixed: N items
+- User decisions: N items
+- Tests created: N files
+```

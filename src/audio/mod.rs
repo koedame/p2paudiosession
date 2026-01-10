@@ -15,7 +15,7 @@ pub use effects::{
     Compressor, Delay, Effect, EffectChain, Gain, HighPassFilter, LowPassFilter, NoiseGate,
     db_to_linear, linear_to_db,
 };
-pub use engine::{AudioConfig, AudioEngine};
+pub use engine::{AudioBuffer, AudioConfig, AudioEngine, BitDepth, CaptureConfig, PlaybackConfig};
 pub use error::AudioError;
 pub use metronome::{Metronome, MetronomeConfig, MetronomeState, MetronomeSync};
 pub use plugin::{AudioPlugin, PluginFormat, PluginHost, PluginInfo, PluginParameter, PluginScanner};
