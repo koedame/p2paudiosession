@@ -25,4 +25,7 @@ pub enum AudioError {
 
     #[error("Recording error: {0}")]
     RecordingError(String),
+
+    #[error("Plugin error: {0}")]
+    PluginError(String),
 }
