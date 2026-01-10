@@ -31,3 +31,6 @@ Desktop.ini
 
 # Log files
 *.log
+
+# act local testing
+.github/act/.secrets

@@ -1,0 +1,12 @@
+{
+  "ref": "refs/heads/main",
+  "repository": {
+    "default_branch": "main",
+    "full_name": "koedame/jamjam",
+    "name": "jamjam"
+  },
+  "head_commit": {
+    "id": "local-test",
+    "message": "Local act test"
+  }
+}

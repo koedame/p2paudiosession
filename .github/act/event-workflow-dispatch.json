@@ -1,0 +1,9 @@
+{
+  "ref": "refs/heads/main",
+  "inputs": {},
+  "repository": {
+    "default_branch": "main",
+    "full_name": "koedame/jamjam",
+    "name": "jamjam"
+  }
+}

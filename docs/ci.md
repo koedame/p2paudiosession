@@ -299,3 +299,60 @@ cd src-tauri && cargo tauri build
 | セキュリティ監査 | 中 | cargo-audit 使用 |
 | コード署名 | 高 | macOS/Windows リリースビルド用 |
 | 自動更新チェック | 低 | Tauri updater 連携 |
+
+---
+
+## 12. act によるローカルワークフロー実行
+
+### 12.1 概要
+
+[act](https://github.com/nektos/act) を使用して GitHub Actions をローカルで実行できる。
+
+**制約:**
+
+- Docker ベースのため Linux ジョブのみ実行可能
+- Windows/macOS ビルドは `--matrix` でスキップする
+
+### 12.2 前提条件
+
+| 要件 | バージョン |
+|------|-----------|
+| Docker | 20.10+ |
+| act | 0.2.50+ |
+| ディスク容量 | 20GB+ (Docker イメージ用) |
+
+### 12.3 インストール
+
+```bash
+# macOS
+brew install act
+
+# Linux
+curl -s https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
+```
+
+### 12.4 実行コマンド
+
+| ワークフロー | コマンド |
+|-------------|---------|
+| CI (push) | `act push -W .github/workflows/ci.yml` |
+| CI (PR) | `act pull_request -e .github/act/event-pull-request.json -W .github/workflows/ci.yml` |
+| CI (特定ジョブ) | `act push -W .github/workflows/ci.yml -j lint` |
+| Build (Linux のみ) | `act push -W .github/workflows/build.yml --matrix os:ubuntu-latest` |
+| ドライラン | `act push -W .github/workflows/ci.yml -n` |
+
+### 12.5 シークレット
+
+```bash
+cp .github/act/.secrets.example .github/act/.secrets
+# .secrets を編集して GITHUB_TOKEN を設定
+act push --secret-file .github/act/.secrets
+```
+
+### 12.6 トラブルシューティング
+
+| 問題 | 対処 |
+|------|------|
+| イメージ取得タイムアウト | `docker pull catthehacker/ubuntu:act-latest` を手動実行 |
+| 権限エラー | Docker が起動中か確認 |
+| キャッシュが遅い | `--bind` フラグを使用 |

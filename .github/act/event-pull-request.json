@@ -1,0 +1,19 @@
+{
+  "action": "opened",
+  "pull_request": {
+    "number": 1,
+    "head": {
+      "ref": "feature-branch",
+      "sha": "local-test"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "title": "Local act test PR"
+  },
+  "repository": {
+    "default_branch": "main",
+    "full_name": "koedame/jamjam",
+    "name": "jamjam"
+  }
+}
