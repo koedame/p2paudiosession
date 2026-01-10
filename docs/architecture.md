@@ -424,3 +424,56 @@ TOML形式を使用する。
 | Windows | MSIインストーラー、ポータブルZIP |
 | macOS | DMG、Homebrew Cask |
 | Linux | AppImage、deb、rpm |
+
+---
+
+## 15. 国際化（i18n）
+
+### 15.1 対応言語
+
+| 言語 | コード | ステータス |
+|------|--------|-----------|
+| 日本語 | ja | 初期対応 |
+| 英語 | en | 初期対応 |
+
+### 15.2 実装
+
+| プラットフォーム | ライブラリ | 翻訳ファイル形式 |
+|-----------------|-----------|-----------------|
+| デスクトップ（Tauri） | i18next | JSON |
+| モバイル（Flutter） | flutter_localizations + intl | ARB |
+
+### 15.3 翻訳ファイル配置
+
+| プラットフォーム | パス |
+|-----------------|------|
+| デスクトップ | ui/locales/{lang}.json |
+| モバイル | lib/l10n/app_{lang}.arb |
+
+### 15.4 言語検出
+
+| 優先順位 | 方法 |
+|---------|------|
+| 1 | config.toml の language 設定 |
+| 2 | システムロケール（OS設定） |
+| 3 | 英語（フォールバック） |
+
+### 15.5 フォールバック動作
+
+翻訳キーが見つからない場合:
+1. 英語の翻訳を使用
+2. 英語も存在しない場合はキー自体を表示
+3. コンソールに警告を出力
+
+### 15.6 翻訳キー命名規則
+
+形式: `{namespace}.{section}.{element}`
+
+| 名前空間 | 対象 | 例 |
+|---------|------|-----|
+| session | セッション管理 | session.create, session.leave |
+| audio | 音声設定 | audio.device.input, audio.start |
+| mixer | ミキサー | mixer.you, mixer.mute |
+| settings | 設定画面 | settings.language, settings.preset |
+| status | 接続状態 | status.connected, status.disconnected |
+| error | エラー | error.connection.timeout |

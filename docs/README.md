@@ -14,6 +14,7 @@ jamjamは、ミュージシャンがインターネット越しにリアルタ�
 | [adr/](./adr/) | 設計判断記録 |
 | [behavior/](./behavior/) | 振る舞い定義（BDD） |
 | [api/](./api/) | API境界定義 |
+| [api/i18n.md](./api/i18n.md) | i18n API境界定義 |
 
 ## 対象ユースケース
 
