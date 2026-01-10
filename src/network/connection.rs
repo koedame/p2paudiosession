@@ -16,12 +16,22 @@ use super::transport::UdpTransport;
 /// Connection statistics
 #[derive(Debug, Clone, Default)]
 pub struct ConnectionStats {
-    pub packets_sent: u64,
-    pub packets_received: u64,
-    pub bytes_sent: u64,
-    pub bytes_received: u64,
+    /// Round-trip time in milliseconds
     pub rtt_ms: f32,
+    /// Packet loss rate (0.0 - 1.0)
     pub packet_loss_rate: f32,
+    /// Jitter in milliseconds
+    pub jitter_ms: f32,
+    /// Total bytes sent
+    pub bytes_sent: u64,
+    /// Total bytes received
+    pub bytes_received: u64,
+    /// Total packets sent
+    pub packets_sent: u64,
+    /// Total packets received
+    pub packets_received: u64,
+    /// Connection uptime in seconds
+    pub uptime_seconds: u64,
 }
 
 /// Connection state
@@ -153,12 +163,14 @@ impl Connection {
     /// Get connection statistics
     pub fn stats(&self) -> ConnectionStats {
         ConnectionStats {
-            packets_sent: self.packets_sent.load(Ordering::Relaxed),
-            packets_received: self.packets_received.load(Ordering::Relaxed),
-            bytes_sent: self.bytes_sent.load(Ordering::Relaxed),
-            bytes_received: self.bytes_received.load(Ordering::Relaxed),
             rtt_ms: 0.0,  // TODO: Implement RTT measurement
             packet_loss_rate: 0.0, // TODO: Implement packet loss tracking
+            jitter_ms: 0.0, // TODO: Implement jitter measurement
+            bytes_sent: self.bytes_sent.load(Ordering::Relaxed),
+            bytes_received: self.bytes_received.load(Ordering::Relaxed),
+            packets_sent: self.packets_sent.load(Ordering::Relaxed),
+            packets_received: self.packets_received.load(Ordering::Relaxed),
+            uptime_seconds: 0, // TODO: Track connection start time
         }
     }
 
