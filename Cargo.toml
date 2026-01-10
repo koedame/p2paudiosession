@@ -6,9 +6,16 @@ license = "MIT"
 description = "Low-latency P2P audio communication for musicians"
 repository = "https://github.com/koedame/p2paudiosession"
 
+[features]
+default = []
+opus-codec = ["dep:opus"]
+
 [dependencies]
 # Audio I/O
 cpal = "0.15"
+
+# Audio codec (optional, requires libopus)
+opus = { version = "0.3", optional = true }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
