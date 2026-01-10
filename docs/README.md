@@ -21,6 +21,7 @@ jamjamは、ミュージシャンがインターネット越しにリアルタ�
 | ドキュメント | 説明 |
 |-------------|------|
 | [architecture.md](./architecture.md) | 技術構成（最重要） |
+| [ci.md](./ci.md) | CI/CD パイプライン |
 | [adr/](./adr/) | 設計判断記録 |
 | [behavior/](./behavior/) | 振る舞い定義（BDD） |
 | [api/](./api/) | API境界定義 |
