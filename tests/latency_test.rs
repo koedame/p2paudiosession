@@ -1,4 +1,4 @@
-//! Latency tests based on docs/behavior/latency.feature
+//! Latency tests based on docs-spec/behavior/latency.feature
 //!
 //! Tests for latency management and jitter buffer functionality.
 

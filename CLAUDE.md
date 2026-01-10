@@ -82,7 +82,7 @@ codec は Opus 48kHz / 20ms frame を使用する。
 ```
 
 #### 2. 仕様書 = 実装の正
-- README や口頭説明より `docs/` を正とする
+- README や口頭説明より `docs-spec/` を正とする
 - 実装が仕様から逸脱する場合は必ず理由をコメントする
 
 #### 3. 図解のルール
@@ -104,17 +104,23 @@ mermaid 不向きケース:
 ## 推奨ディレクトリ構成
 
 ```
-/docs
- ├─ README.md              # 全体概要（軽量）
- ├─ architecture.md        # 最重要：技術構成
- ├─ adr/                   # 設計判断の固定
+/docs-spec              # AI→AI パイプライン用仕様書（唯一の正）
+ ├─ README.md           # 仕様書概要
+ ├─ architecture.md     # 最重要：技術構成
+ ├─ adr/                # 設計判断の固定
  │   ├─ ADR-001-*.md
  │   └─ ADR-002-*.md
- ├─ behavior/              # 振る舞い定義（BDD）
+ ├─ behavior/           # 振る舞い定義（BDD）
  │   ├─ *.feature
- └─ api/                   # 境界定義
+ └─ api/                # 境界定義
      ├─ audio_engine.md
      ├─ signaling.md
+
+/docs-site              # Docusaurus 開発者向けドキュメント
+ ├─ docs/
+ │   ├─ intro.md
+ │   ├─ getting-started/
+ │   └─ development/
 ```
 
 ---
@@ -223,7 +229,7 @@ start_capture(device_id)
 
 仕様書完成後、実装時は以下に従う：
 
-- `docs/` 以下を正として実装する
+- `docs-spec/` 以下を正として実装する
 - ADR に記載された判断は変更しない
 - リアルタイム制約を破る場合は理由をコメントで残す
 - 不明点は `TODO` として明示する
@@ -252,12 +258,12 @@ start_capture(device_id)
 
 | 変更内容 | 更新対象ドキュメント |
 |---------|---------------------|
-| 新規モジュール追加 | architecture.md（モジュール構成） |
-| 公開API追加・変更 | api/*.md（該当するAPI仕様） |
-| 新規ライブラリ導入 | architecture.md（主要ライブラリ） |
-| エラー型追加 | api/*.md（エラーセクション） |
-| 設計判断の変更 | adr/ADR-XXX-*.md（新規ADR作成） |
-| 機能追加（Phase完了時） | docs/README.md（実装状況） |
+| 新規モジュール追加 | docs-spec/architecture.md（モジュール構成） |
+| 公開API追加・変更 | docs-spec/api/*.md（該当するAPI仕様） |
+| 新規ライブラリ導入 | docs-spec/architecture.md（主要ライブラリ） |
+| エラー型追加 | docs-spec/api/*.md（エラーセクション） |
+| 設計判断の変更 | docs-spec/adr/ADR-XXX-*.md（新規ADR作成） |
+| 機能追加（Phase完了時） | docs-spec/README.md（実装状況） |
 
 ### 仕様書更新が不要なケース
 

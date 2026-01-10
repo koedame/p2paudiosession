@@ -1,6 +1,6 @@
 ---
 name: review
-description: Review specification documents for compliance with project guidelines. Use when checking docs/ for ambiguous expressions or missing required sections.
+description: Review specification documents for compliance with project guidelines. Use when checking docs-spec/ for ambiguous expressions or missing required sections.
 allowed-tools: Read, Glob, Grep
 ---
 
@@ -10,7 +10,7 @@ allowed-tools: Read, Glob, Grep
 
 1. Determine the review target:
    - If argument is provided: Review that specific file
-   - If no argument: Find all files in `docs/` directory using Glob
+   - If no argument: Find all files in `docs-spec/` directory using Glob
 
 2. Read each target file
 
@@ -68,7 +68,7 @@ Required sections (flag if missing):
 
 ---
 
-### ADR Files (docs/adr/*.md)
+### ADR Files (docs-spec/adr/*.md)
 
 Required sections:
 - [ ] `## Context` - Why was this decision needed?
@@ -83,7 +83,7 @@ Flag if:
 
 ---
 
-### BDD Files (docs/behavior/*.feature)
+### BDD Files (docs-spec/behavior/*.feature)
 
 Required structure:
 - [ ] `Feature:` declaration
@@ -96,7 +96,7 @@ Flag if:
 
 ---
 
-### API Spec Files (docs/api/*.md)
+### API Spec Files (docs-spec/api/*.md)
 
 Required for each API:
 - [ ] API name
@@ -114,7 +114,7 @@ Flag if:
 ## Example Output
 
 ```
-## docs/architecture.md
+## docs-spec/architecture.md
 
 ### Issues Found
 - [Line 15] Ambiguous expression detected

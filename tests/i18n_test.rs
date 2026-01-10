@@ -1,4 +1,4 @@
-//! i18n tests based on docs/behavior/i18n.feature
+//! i18n tests based on docs-spec/behavior/i18n.feature
 //!
 //! Tests for internationalization functionality.
 

@@ -1,4 +1,4 @@
-//! Connection tests based on docs/behavior/connection.feature
+//! Connection tests based on docs-spec/behavior/connection.feature
 //!
 //! Tests for session connection functionality.
 

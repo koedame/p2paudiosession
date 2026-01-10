@@ -1,4 +1,4 @@
-//! Audio quality tests based on docs/behavior/audio-quality.feature
+//! Audio quality tests based on docs-spec/behavior/audio-quality.feature
 //!
 //! Tests for audio quality functionality.
 

@@ -1,6 +1,6 @@
 ---
 name: sync-spec
-description: Check and synchronize specification documents (docs/) with implementation (src/, src-tauri/, tests/). Detect discrepancies and auto-fix when possible.
+description: Check and synchronize specification documents (docs-spec/) with implementation (src/, src-tauri/, tests/). Detect discrepancies and auto-fix when possible.
 allowed-tools: Read, Glob, Grep, Edit, Write, Bash(cargo:*), AskUserQuestion
 ---
 
@@ -10,9 +10,9 @@ allowed-tools: Read, Glob, Grep, Edit, Write, Bash(cargo:*), AskUserQuestion
 
 ### Phase 1: Scan Specifications
 
-1. Read all API specs from `docs/api/*.md`
-2. Read architecture from `docs/architecture.md`
-3. Read BDD scenarios from `docs/behavior/*.feature`
+1. Read all API specs from `docs-spec/api/*.md`
+2. Read architecture from `docs-spec/architecture.md`
+3. Read BDD scenarios from `docs-spec/behavior/*.feature`
 
 For each spec file, extract:
 - Rust code blocks containing `struct`, `enum`, `trait`, `fn` definitions
@@ -37,12 +37,12 @@ Use this mapping table:
 
 | Spec File | Implementation Files |
 |-----------|---------------------|
-| docs/api/audio_engine.md | src/audio/engine.rs, src/audio/device.rs, src/audio/effects.rs, src/audio/recording.rs, src/audio/metronome.rs |
-| docs/api/network.md | src/network/connection.rs, src/network/session.rs, src/network/fec.rs, src/network/transport.rs |
-| docs/api/signaling.md | src/network/signaling.rs |
-| docs/api/plugin.md | src/audio/plugin.rs |
-| docs/api/i18n.md | ui/locales/*.json |
-| docs/behavior/*.feature | tests/*.rs |
+| docs-spec/api/audio_engine.md | src/audio/engine.rs, src/audio/device.rs, src/audio/effects.rs, src/audio/recording.rs, src/audio/metronome.rs |
+| docs-spec/api/network.md | src/network/connection.rs, src/network/session.rs, src/network/fec.rs, src/network/transport.rs |
+| docs-spec/api/signaling.md | src/network/signaling.rs |
+| docs-spec/api/plugin.md | src/audio/plugin.rs |
+| docs-spec/api/i18n.md | ui/locales/*.json |
+| docs-spec/behavior/*.feature | tests/*.rs |
 
 Compare:
 - Struct names and fields (name, type)
@@ -76,7 +76,7 @@ Example:
 
 ### Phase 5: Ensure Tests
 
-1. For each `Scenario:` in `docs/behavior/*.feature`:
+1. For each `Scenario:` in `docs-spec/behavior/*.feature`:
    - Map to test file: `connection.feature` → `tests/connection_test.rs`
    - If test file missing → Create with test skeleton
    - If scenario not covered → Add test function

@@ -35,3 +35,8 @@ Desktop.ini
 
 # act local testing
 .github/act/.secrets
+
+# Docusaurus
+docs-site/node_modules/
+docs-site/.docusaurus/
+docs-site/build/
