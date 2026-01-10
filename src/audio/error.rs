@@ -22,4 +22,7 @@ pub enum AudioError {
 
     #[error("Buffer underrun")]
     BufferUnderrun,
+
+    #[error("Recording error: {0}")]
+    RecordingError(String),
 }
