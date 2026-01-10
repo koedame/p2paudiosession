@@ -19,13 +19,14 @@ Audio Engineは以下の責務を持つ:
 ## 2. モジュール構成
 
 ```
-audio_engine/
+audio/
 ├── device.rs       # デバイス管理
-├── capture.rs      # 音声キャプチャ
-├── playback.rs     # 音声再生
-├── monitor.rs      # ローカルモニタリング
-├── resampler.rs    # リサンプリング
-└── buffer.rs       # リングバッファ
+├── effects.rs      # エフェクト処理
+├── engine.rs       # オーディオエンジン（キャプチャ・再生）
+├── error.rs        # エラー型
+├── metronome.rs    # メトロノーム
+├── plugin.rs       # プラグインホスト
+└── recording.rs    # WAV録音
 ```
 
 ---
@@ -291,28 +292,243 @@ impl<T> RingBuffer<T> {
 
 ---
 
-## 9. エラー
+## 9. エフェクト API
+
+### 9.1 エフェクトトレイト
 
 ```rust
-enum AudioError {
-    /// デバイスが見つからない
-    DeviceNotFound,
-    /// デバイスオープン失敗
-    DeviceOpenFailed(String),
-    /// サポートされていない設定
-    UnsupportedConfig,
-    /// バッファオーバーフロー
-    BufferOverflow,
-    /// バッファアンダーラン
-    BufferUnderrun,
-    /// 内部エラー
-    Internal(String),
+/// エフェクト共通トレイト
+pub trait Effect: Send + Sync {
+    /// サンプルをインプレース処理
+    fn process(&mut self, samples: &mut [f32]);
+
+    /// エフェクト状態をリセット
+    fn reset(&mut self);
+
+    /// エフェクト名を取得
+    fn name(&self) -> &str;
+
+    /// 有効/無効状態を取得
+    fn is_enabled(&self) -> bool;
+
+    /// 有効/無効を設定
+    fn set_enabled(&mut self, enabled: bool);
+}
+```
+
+### 9.2 内蔵エフェクト
+
+```rust
+/// 音量調整（リニアゲイン）
+pub struct Gain {
+    pub gain: f32,  // リニア値（1.0 = unity）
+}
+
+impl Gain {
+    /// dB値でゲインを作成
+    pub fn new(gain_db: f32) -> Self;
+
+    /// dB値でゲインを設定
+    pub fn set_gain_db(&mut self, db: f32);
+}
+
+/// ローパスフィルタ（1次RC）
+pub struct LowPassFilter {
+    cutoff: f32,        // カットオフ周波数 (Hz)
+    sample_rate: f32,   // サンプルレート
+}
+
+impl LowPassFilter {
+    pub fn new(cutoff_hz: f32, sample_rate: f32) -> Self;
+    pub fn set_cutoff(&mut self, cutoff_hz: f32);
+}
+
+/// ハイパスフィルタ（1次RC）
+pub struct HighPassFilter {
+    cutoff: f32,
+    sample_rate: f32,
+}
+
+/// コンプレッサー
+pub struct Compressor {
+    pub threshold_db: f32,  // スレッショルド（dB）
+    pub ratio: f32,         // 圧縮比（例: 4.0 = 4:1）
+    pub attack_ms: f32,     // アタックタイム（ms）
+    pub release_ms: f32,    // リリースタイム（ms）
+    pub makeup_db: f32,     // メイクアップゲイン（dB）
+}
+
+/// ディレイ
+pub struct Delay {
+    pub delay_ms: f32,  // ディレイタイム（ms）
+    pub feedback: f32,  // フィードバック量（0.0-0.95）
+    pub mix: f32,       // ウェット/ドライミックス（0.0=dry, 1.0=wet）
+}
+
+/// ノイズゲート
+pub struct NoiseGate {
+    pub threshold_db: f32,  // スレッショルド（dB）
+    pub attack_ms: f32,     // アタックタイム（ms）
+    pub release_ms: f32,    // リリースタイム（ms）
+}
+```
+
+### 9.3 エフェクトチェイン
+
+```rust
+/// 複数エフェクトの直列処理
+pub struct EffectChain {
+    effects: Vec<Box<dyn Effect>>,
+    enabled: bool,
+}
+
+impl EffectChain {
+    pub fn new() -> Self;
+
+    /// エフェクトを追加
+    pub fn add(&mut self, effect: Box<dyn Effect>);
+
+    /// エフェクトを削除
+    pub fn remove(&mut self, index: usize) -> Option<Box<dyn Effect>>;
+
+    /// サンプルを処理（全エフェクトを順番に適用）
+    pub fn process(&mut self, samples: &mut [f32]);
+
+    /// 全エフェクトをリセット
+    pub fn reset(&mut self);
 }
 ```
 
 ---
 
-## 10. スレッドモデル
+## 10. 録音 API
+
+### 10.1 レコーダー
+
+```rust
+/// WAV録音
+pub struct Recorder {
+    sample_rate: u32,
+    channels: u16,
+    bits_per_sample: u16,  // 16, 24, 32
+}
+
+impl Recorder {
+    pub fn new(sample_rate: u32, channels: u16, bits_per_sample: u16) -> Self;
+
+    /// 録音開始
+    /// スレッド: 非リアルタイム
+    pub fn start<P: AsRef<Path>>(&mut self, path: P) -> Result<(), AudioError>;
+
+    /// 録音停止
+    /// スレッド: 非リアルタイム
+    pub fn stop(&mut self) -> Result<RecordingInfo, AudioError>;
+
+    /// サンプル書き込み
+    /// スレッド: 任意（バッファリング済み）
+    pub fn write_samples(&mut self, samples: &[f32]) -> Result<(), AudioError>;
+
+    /// 録音中かどうか
+    pub fn is_recording(&self) -> bool;
+
+    /// 現在の録音時間（秒）
+    pub fn duration_secs(&self) -> f64;
+}
+
+/// 録音完了情報
+pub struct RecordingInfo {
+    pub path: String,
+    pub samples: u64,
+    pub duration_secs: f64,
+    pub file_size: u64,
+}
+```
+
+### 10.2 WAVフォーマット
+
+| ビット深度 | 形式 | 変換 |
+|-----------|------|------|
+| 16bit | PCM signed | f32 * 32767 |
+| 24bit | PCM signed | f32 * 8388607 |
+| 32bit | IEEE float | そのまま |
+
+---
+
+## 11. メトロノーム API
+
+### 11.1 設定
+
+```rust
+pub struct MetronomeConfig {
+    pub bpm: f32,           // 20.0 - 300.0
+    pub beats_per_bar: u8,  // 1 - 16
+    pub sample_rate: u32,
+}
+```
+
+### 11.2 メトロノーム
+
+```rust
+pub struct Metronome {
+    config: MetronomeConfig,
+    state: MetronomeState,
+}
+
+impl Metronome {
+    pub fn new(config: MetronomeConfig) -> Self;
+
+    /// BPM設定
+    pub fn set_bpm(&mut self, bpm: f32);
+
+    /// 開始
+    pub fn start(&mut self);
+
+    /// 停止
+    pub fn stop(&mut self);
+
+    /// 現在のビート番号取得（0-indexed）
+    pub fn current_beat(&self) -> u8;
+
+    /// クリック音サンプル生成
+    pub fn generate_samples(&mut self, output: &mut [f32]);
+}
+
+/// メトロノーム同期（ネットワーク用）
+pub struct MetronomeSync {
+    pub bpm: f32,
+    pub beat: u8,
+    pub timestamp: u64,
+}
+```
+
+---
+
+## 12. エラー
+
+```rust
+pub enum AudioError {
+    /// デバイスが見つからない
+    DeviceNotFound(String),
+    /// デバイスオープン失敗
+    DeviceOpenFailed(String),
+    /// サポートされていない設定
+    UnsupportedConfig(String),
+    /// ストリームエラー
+    StreamError(String),
+    /// バッファオーバーフロー
+    BufferOverflow,
+    /// バッファアンダーラン
+    BufferUnderrun,
+    /// 録音エラー
+    RecordingError(String),
+    /// プラグインエラー
+    PluginError(String),
+}
+```
+
+---
+
+## 13. スレッドモデル
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -336,7 +552,7 @@ enum AudioError {
 
 ---
 
-## 11. 使用例
+## 14. 使用例
 
 ```rust
 // デバイス列挙

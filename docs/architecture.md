@@ -41,17 +41,47 @@ jamjamの技術構成を定義する。本ドキュメントは実装の正と�
 | モバイルGUI | Dart (Flutter) |
 | シグナリングサーバー | Rust |
 
-### 3.2 主要ライブラリ（予定）
+### 3.2 主要ライブラリ
 
-| 機能 | ライブラリ |
-|------|-----------|
-| 音声I/O | cpal |
-| 音声コーデック（Opus） | opus-rs または audiopus |
-| 音声コーデック（FLAC） | flac-sys または claxon |
-| ネットワーク | tokio + socket2 |
-| シリアライズ | bincode |
-| GUI（デスクトップ） | Tauri 2.0 |
-| GUI（モバイル） | Flutter + flutter_rust_bridge |
+| 機能 | ライブラリ | 状態 |
+|------|-----------|------|
+| 音声I/O | cpal | 実装済 |
+| リングバッファ | ringbuf | 実装済 |
+| 非同期ランタイム | tokio | 実装済 |
+| シリアライズ | bincode | 実装済 |
+| ロギング | tracing | 実装済 |
+| エラー処理 | thiserror | 実装済 |
+| GUI（デスクトップ） | Tauri 2.0 | 実装済 |
+| 音声コーデック（Opus） | opus-rs | 予定 |
+| 音声コーデック（FLAC） | claxon | 予定 |
+| GUI（モバイル） | Flutter + flutter_rust_bridge | 予定 |
+
+### 3.3 実装済みモジュール構成
+
+```
+src/
+├── audio/
+│   ├── device.rs       # デバイス列挙
+│   ├── effects.rs      # エフェクト（Gain, Filter, Compressor, Delay, Gate）
+│   ├── engine.rs       # オーディオエンジン
+│   ├── error.rs        # エラー型
+│   ├── metronome.rs    # メトロノーム
+│   ├── plugin.rs       # プラグインホスト
+│   └── recording.rs    # WAV録音
+├── network/
+│   ├── error.rs        # ネットワークエラー
+│   ├── fec.rs          # 前方誤り訂正
+│   ├── protocol.rs     # jamjamプロトコル
+│   ├── session.rs      # セッション管理
+│   ├── signaling.rs    # シグナリング
+│   ├── stun.rs         # STUN クライアント
+│   └── transport.rs    # UDPトランスポート
+├── lib.rs
+└── main.rs
+
+src-tauri/              # Tauri デスクトップアプリ
+ui/dist/                # フロントエンドUI
+```
 
 ---
 
@@ -312,17 +342,38 @@ jamjam preset save <NAME>
 | 拍子 | 設定可能（4/4、3/4等） |
 | 同期方式 | タイムスタンプベース |
 
-### 9.4 エフェクト（将来）
+### 9.4 エフェクト
 
-内蔵エフェクトの提供を検討する。
+内蔵エフェクトを提供する。
 
-### 9.5 プラグイン対応（将来）
+| エフェクト | 説明 | パラメータ |
+|-----------|------|-----------|
+| Gain | 音量調整 | gain_db: dB値 |
+| LowPassFilter | 低域通過フィルタ | cutoff_hz: カットオフ周波数 |
+| HighPassFilter | 高域通過フィルタ | cutoff_hz: カットオフ周波数 |
+| Compressor | ダイナミクス圧縮 | threshold_db, ratio, attack_ms, release_ms, makeup_db |
+| Delay | ディレイ | delay_ms, feedback, mix |
+| NoiseGate | ノイズゲート | threshold_db, attack_ms, release_ms |
 
-| 規格 | 対応予定 |
-|------|---------|
-| VST3 | 検討（GPLv3ライセンス） |
-| CLAP | 優先検討（MITライセンス互換） |
-| AU | macOSのみ検討 |
+エフェクトはEffectChainで順序処理される。各エフェクトは個別に有効/無効切替可能。
+
+### 9.5 プラグイン対応
+
+外部オーディオプラグインのホスト機能を提供する。
+
+| 規格 | 対応状況 | 備考 |
+|------|---------|------|
+| VST3 | インターフェース実装済 | プラグインロード機能は別途実装 |
+| CLAP | インターフェース実装済 | MITライセンス互換 |
+| AU | インターフェース実装済 | macOSのみ |
+
+**プラグイン検索パス:**
+
+| プラットフォーム | パス |
+|-----------------|------|
+| Linux | ~/.vst3, /usr/lib/vst3, ~/.clap, /usr/lib/clap |
+| macOS | /Library/Audio/Plug-Ins/VST3, ~/Library/Audio/Plug-Ins/VST3, Components |
+| Windows | C:\Program Files\Common Files\VST3, CLAP |
 
 ---
 
