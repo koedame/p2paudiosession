@@ -242,7 +242,9 @@ async fn handle_connection(
         let mut rooms_guard = rooms.write().await;
         if let Some(room) = rooms_guard.get_mut(&room_id) {
             room.peers.remove(&peer_id);
-            let _ = room.broadcast_tx.send(SignalingMessage::PeerLeft { peer_id });
+            let _ = room
+                .broadcast_tx
+                .send(SignalingMessage::PeerLeft { peer_id });
 
             // Remove empty rooms
             if room.peers.is_empty() {
@@ -363,7 +365,9 @@ async fn process_message(
                 let mut rooms_guard = rooms.write().await;
                 if let Some(room) = rooms_guard.get_mut(&room_id) {
                     room.peers.remove(&peer_id);
-                    let _ = room.broadcast_tx.send(SignalingMessage::PeerLeft { peer_id });
+                    let _ = room
+                        .broadcast_tx
+                        .send(SignalingMessage::PeerLeft { peer_id });
 
                     if room.peers.is_empty() {
                         rooms_guard.remove(&room_id);
@@ -379,7 +383,8 @@ async fn process_message(
             public_addr,
             local_addr,
         } => {
-            if let (Some(room_id), Some(peer_id)) = (current_room.as_ref(), current_peer_id.as_ref())
+            if let (Some(room_id), Some(peer_id)) =
+                (current_room.as_ref(), current_peer_id.as_ref())
             {
                 let mut rooms_guard = rooms.write().await;
                 if let Some(room) = rooms_guard.get_mut(room_id) {
@@ -480,7 +485,9 @@ impl SignalingConnection {
                     });
                 }
                 Some(Ok(Message::Close(_))) | None => {
-                    return Err(NetworkError::SignalingError("Connection closed".to_string()));
+                    return Err(NetworkError::SignalingError(
+                        "Connection closed".to_string(),
+                    ));
                 }
                 Some(Err(e)) => {
                     return Err(NetworkError::SignalingError(format!(

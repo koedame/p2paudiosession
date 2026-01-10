@@ -2,6 +2,7 @@
 /target
 **/target
 dist/
+!ui/dist/
 build/
 .cache/
 

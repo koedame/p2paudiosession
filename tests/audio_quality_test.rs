@@ -3,8 +3,8 @@
 //! Tests for audio quality functionality.
 
 use jamjam::audio::{
-    AudioConfig, AudioEngine, CaptureConfig, PlaybackConfig, BitDepth,
-    EffectChain, Gain, Recorder, Metronome, MetronomeConfig,
+    AudioConfig, AudioEngine, BitDepth, CaptureConfig, EffectChain, Gain, Metronome,
+    MetronomeConfig, PlaybackConfig, Recorder,
 };
 
 /// Test: Operates at 48kHz sample rate

@@ -87,14 +87,14 @@ impl Recorder {
             let data_size = samples * (self.bits_per_sample as u64 / 8);
 
             // Seek back and update the header with correct sizes
-            writer.flush().map_err(|e| {
-                AudioError::RecordingError(format!("Failed to flush: {}", e))
-            })?;
+            writer
+                .flush()
+                .map_err(|e| AudioError::RecordingError(format!("Failed to flush: {}", e)))?;
 
             // Get the underlying file and update header
-            let _file = writer.into_inner().map_err(|e| {
-                AudioError::RecordingError(format!("Failed to get file: {}", e))
-            })?;
+            let _file = writer
+                .into_inner()
+                .map_err(|e| AudioError::RecordingError(format!("Failed to get file: {}", e)))?;
 
             // Rewrite header with correct size
             update_wav_header(
@@ -121,7 +121,9 @@ impl Recorder {
                 file_size: 44 + data_size, // Header + data
             })
         } else {
-            Err(AudioError::RecordingError("No writer available".to_string()))
+            Err(AudioError::RecordingError(
+                "No writer available".to_string(),
+            ))
         }
     }
 
@@ -254,14 +256,18 @@ fn update_wav_header(
 ) -> std::io::Result<()> {
     use std::io::{Seek, SeekFrom};
 
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .open(path)?;
+    let mut file = std::fs::OpenOptions::new().write(true).open(path)?;
 
     file.seek(SeekFrom::Start(0))?;
 
     let mut writer = BufWriter::new(&mut file);
-    write_wav_header(&mut writer, sample_rate, channels, bits_per_sample, data_size)?;
+    write_wav_header(
+        &mut writer,
+        sample_rate,
+        channels,
+        bits_per_sample,
+        data_size,
+    )?;
     writer.flush()?;
 
     Ok(())

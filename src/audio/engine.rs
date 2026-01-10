@@ -137,7 +137,11 @@ impl AudioBuffer {
         } else {
             0
         };
-        Self { data, channels, samples }
+        Self {
+            data,
+            channels,
+            samples,
+        }
     }
 
     /// Create an empty buffer
@@ -183,7 +187,11 @@ impl AudioEngine {
     }
 
     /// Start audio capture with a callback for captured samples
-    pub fn start_capture<F>(&mut self, device_id: Option<&DeviceId>, callback: F) -> Result<(), AudioError>
+    pub fn start_capture<F>(
+        &mut self,
+        device_id: Option<&DeviceId>,
+        callback: F,
+    ) -> Result<(), AudioError>
     where
         F: Fn(&[f32], u64) + Send + Sync + 'static,
     {
@@ -220,7 +228,8 @@ impl AudioEngine {
             .build_input_stream(
                 &stream_config,
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                    let timestamp = sample_count_clone.fetch_add(data.len() as u64, Ordering::Relaxed);
+                    let timestamp =
+                        sample_count_clone.fetch_add(data.len() as u64, Ordering::Relaxed);
                     callback_clone(data, timestamp);
                 },
                 err_fn,
@@ -228,7 +237,9 @@ impl AudioEngine {
             )
             .map_err(|e| AudioError::StreamError(e.to_string()))?;
 
-        stream.play().map_err(|e| AudioError::StreamError(e.to_string()))?;
+        stream
+            .play()
+            .map_err(|e| AudioError::StreamError(e.to_string()))?;
         self.capture_stream = Some(stream);
         self.running.store(true, Ordering::SeqCst);
 
@@ -286,7 +297,9 @@ impl AudioEngine {
             )
             .map_err(|e| AudioError::StreamError(e.to_string()))?;
 
-        stream.play().map_err(|e| AudioError::StreamError(e.to_string()))?;
+        stream
+            .play()
+            .map_err(|e| AudioError::StreamError(e.to_string()))?;
         self.playback_stream = Some(stream);
 
         debug!("Playback started with config: {:?}", self.config);
@@ -327,7 +340,10 @@ impl AudioEngine {
     /// Enable or disable local monitoring
     pub fn set_local_monitoring(&self, enabled: bool) {
         self.local_monitor_enabled.store(enabled, Ordering::SeqCst);
-        info!("Local monitoring: {}", if enabled { "enabled" } else { "disabled" });
+        info!(
+            "Local monitoring: {}",
+            if enabled { "enabled" } else { "disabled" }
+        );
     }
 
     /// Check if local monitoring is enabled

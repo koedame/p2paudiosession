@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>jamjam - P2P Audio</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <h1>jamjam</h1>
+            <div class="status" id="status">
+                <span class="status-dot disconnected"></span>
+                <span class="status-text">Disconnected</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Connection Panel -->
+            <section class="panel connection-panel">
+                <h2>Session</h2>
+                <div class="connection-controls">
+                    <div class="form-group">
+                        <label for="port">Port</label>
+                        <input type="number" id="port" value="5000" min="1024" max="65535">
+                    </div>
+                    <div class="button-group">
+                        <button id="btn-create" class="btn btn-primary">Create Session</button>
+                        <button id="btn-leave" class="btn btn-danger" disabled>Leave</button>
+                    </div>
+                </div>
+                <div class="session-info" id="session-info" style="display: none;">
+                    <p>Local Address: <span id="local-addr">-</span></p>
+                    <p>Peers: <span id="peer-count">0</span></p>
+                </div>
+            </section>
+
+            <!-- Audio Settings Panel -->
+            <section class="panel audio-panel">
+                <h2>Audio Settings</h2>
+                <div class="form-group">
+                    <label for="input-device">Input Device</label>
+                    <select id="input-device">
+                        <option value="">Default</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="output-device">Output Device</label>
+                    <select id="output-device">
+                        <option value="">Default</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="sample-rate">Sample Rate</label>
+                    <select id="sample-rate">
+                        <option value="44100">44.1 kHz</option>
+                        <option value="48000" selected>48 kHz</option>
+                        <option value="96000">96 kHz</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="frame-size">Frame Size</label>
+                    <select id="frame-size">
+                        <option value="64">64 samples</option>
+                        <option value="128" selected>128 samples</option>
+                        <option value="256">256 samples</option>
+                        <option value="512">512 samples</option>
+                    </select>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="local-monitor">
+                    <label for="local-monitor">Local Monitoring</label>
+                </div>
+                <div class="button-group">
+                    <button id="btn-start-audio" class="btn btn-success">Start Audio</button>
+                    <button id="btn-stop-audio" class="btn btn-danger" disabled>Stop Audio</button>
+                </div>
+            </section>
+
+            <!-- Mixer Panel -->
+            <section class="panel mixer-panel">
+                <h2>Mixer</h2>
+                <div class="mixer-channels" id="mixer-channels">
+                    <!-- Local channel -->
+                    <div class="channel local">
+                        <div class="channel-label">You</div>
+                        <div class="meter">
+                            <div class="meter-fill" id="meter-local"></div>
+                        </div>
+                        <input type="range" class="volume-slider" id="volume-local" min="0" max="100" value="100">
+                        <div class="channel-controls">
+                            <button class="btn-icon mute-btn" id="mute-local" title="Mute">
+                                <span class="icon">🔊</span>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Peer channels will be added dynamically -->
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <span>jamjam v0.1.0</span>
+            <span id="latency">Latency: --</span>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

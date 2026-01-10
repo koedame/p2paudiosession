@@ -143,10 +143,7 @@ impl Connection {
         }
 
         // Convert f32 samples to bytes (little-endian)
-        let bytes: Vec<u8> = data
-            .iter()
-            .flat_map(|&s| s.to_le_bytes())
-            .collect();
+        let bytes: Vec<u8> = data.iter().flat_map(|&s| s.to_le_bytes()).collect();
 
         let packet = Packet::audio(self.next_sequence(), timestamp, bytes);
         let packet_bytes = packet.to_bytes();
@@ -163,9 +160,9 @@ impl Connection {
     /// Get connection statistics
     pub fn stats(&self) -> ConnectionStats {
         ConnectionStats {
-            rtt_ms: 0.0,  // TODO: Implement RTT measurement
+            rtt_ms: 0.0,           // TODO: Implement RTT measurement
             packet_loss_rate: 0.0, // TODO: Implement packet loss tracking
-            jitter_ms: 0.0, // TODO: Implement jitter measurement
+            jitter_ms: 0.0,        // TODO: Implement jitter measurement
             bytes_sent: self.bytes_sent.load(Ordering::Relaxed),
             bytes_received: self.bytes_received.load(Ordering::Relaxed),
             packets_sent: self.packets_sent.load(Ordering::Relaxed),

@@ -58,7 +58,10 @@ impl UdpTransport {
     /// Start a receive loop that sends packets to a channel
     pub fn start_receive_loop(
         self: Arc<Self>,
-    ) -> (mpsc::Receiver<(Packet, SocketAddr)>, tokio::task::JoinHandle<()>) {
+    ) -> (
+        mpsc::Receiver<(Packet, SocketAddr)>,
+        tokio::task::JoinHandle<()>,
+    ) {
         let (tx, rx) = mpsc::channel(1024);
         let socket = self.clone();
 

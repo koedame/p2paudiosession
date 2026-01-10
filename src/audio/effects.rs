@@ -535,9 +535,7 @@ mod tests {
     #[test]
     fn test_low_pass_filter() {
         let mut lpf = LowPassFilter::new(1000.0, 48000.0);
-        let mut samples: Vec<f32> = (0..1000)
-            .map(|i| (i as f32 * 0.1).sin())
-            .collect();
+        let mut samples: Vec<f32> = (0..1000).map(|i| (i as f32 * 0.1).sin()).collect();
 
         lpf.process(&mut samples);
 

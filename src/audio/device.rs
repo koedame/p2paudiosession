@@ -83,7 +83,8 @@ fn get_device_capabilities(device: &cpal::Device) -> (Vec<u32>, Vec<u16>) {
     let mut channels = Vec::new();
 
     // Try input configs first, then output configs
-    let configs: Vec<_> = device.supported_input_configs()
+    let configs: Vec<_> = device
+        .supported_input_configs()
         .into_iter()
         .flatten()
         .chain(device.supported_output_configs().into_iter().flatten())

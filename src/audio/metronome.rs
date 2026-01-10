@@ -2,9 +2,9 @@
 //!
 //! Generates click sounds at a specified BPM that can be shared across peers.
 
+use std::f32::consts::PI;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
-use std::f32::consts::PI;
 
 /// Metronome configuration
 #[derive(Debug, Clone)]
@@ -133,10 +133,13 @@ impl Metronome {
 
     /// Synchronize to a remote state
     pub fn sync_to(&self, state: MetronomeState) {
-        self.current_beat.store(state.current_beat, Ordering::SeqCst);
+        self.current_beat
+            .store(state.current_beat, Ordering::SeqCst);
         self.current_measure.store(state.measure, Ordering::SeqCst);
-        self.sample_position.store(state.sample_position, Ordering::SeqCst);
-        self.total_samples.store(state.total_samples, Ordering::SeqCst);
+        self.sample_position
+            .store(state.sample_position, Ordering::SeqCst);
+        self.total_samples
+            .store(state.total_samples, Ordering::SeqCst);
     }
 
     /// Generate audio samples for the metronome
@@ -186,8 +189,10 @@ impl Metronome {
         // Update state
         self.sample_position.store(sample_pos, Ordering::SeqCst);
         self.current_beat.store(current_beat, Ordering::SeqCst);
-        self.current_measure.store(current_measure, Ordering::SeqCst);
-        self.total_samples.fetch_add(num_samples as u64, Ordering::SeqCst);
+        self.current_measure
+            .store(current_measure, Ordering::SeqCst);
+        self.total_samples
+            .fetch_add(num_samples as u64, Ordering::SeqCst);
 
         output
     }
@@ -250,8 +255,7 @@ impl MetronomeSync {
             current_beat: u32::from_be_bytes([data[8], data[9], data[10], data[11]]),
             measure: u32::from_be_bytes([data[12], data[13], data[14], data[15]]),
             sample_position: u64::from_be_bytes([
-                data[16], data[17], data[18], data[19],
-                data[20], data[21], data[22], data[23],
+                data[16], data[17], data[18], data[19], data[20], data[21], data[22], data[23],
             ]),
         })
     }

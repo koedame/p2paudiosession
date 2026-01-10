@@ -104,7 +104,10 @@ fn test_fec_multiple_packet_loss() {
 
     // Cannot recover with 2 missing packets
     let recovered = decoder.add_fec(fec);
-    assert!(recovered.is_none(), "Should not recover with 2+ missing packets");
+    assert!(
+        recovered.is_none(),
+        "Should not recover with 2+ missing packets"
+    );
 }
 
 /// Test: Latency in LAN environment
@@ -190,10 +193,26 @@ fn test_connection_quality_indicator() {
     }
 
     let checks = vec![
-        QualityCheck { rtt_ms: 20.0, packet_loss: 0.005, expected: "good" },
-        QualityCheck { rtt_ms: 50.0, packet_loss: 0.02, expected: "fair" },
-        QualityCheck { rtt_ms: 150.0, packet_loss: 0.01, expected: "poor" },
-        QualityCheck { rtt_ms: 20.0, packet_loss: 0.10, expected: "poor" },
+        QualityCheck {
+            rtt_ms: 20.0,
+            packet_loss: 0.005,
+            expected: "good",
+        },
+        QualityCheck {
+            rtt_ms: 50.0,
+            packet_loss: 0.02,
+            expected: "fair",
+        },
+        QualityCheck {
+            rtt_ms: 150.0,
+            packet_loss: 0.01,
+            expected: "poor",
+        },
+        QualityCheck {
+            rtt_ms: 20.0,
+            packet_loss: 0.10,
+            expected: "poor",
+        },
     ];
 
     for check in checks {
@@ -206,9 +225,12 @@ fn test_connection_quality_indicator() {
         };
 
         assert_eq!(
-            quality, check.expected,
+            quality,
+            check.expected,
             "RTT: {}ms, Loss: {}% should be {}",
-            check.rtt_ms, check.packet_loss * 100.0, check.expected
+            check.rtt_ms,
+            check.packet_loss * 100.0,
+            check.expected
         );
     }
 }

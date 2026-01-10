@@ -96,10 +96,13 @@ impl StunClient {
 
         // Wait for response
         let mut buf = [0u8; 576]; // Minimum STUN message size
-        let (len, _) = timeout(Duration::from_millis(self.timeout_ms), self.socket.recv_from(&mut buf))
-            .await
-            .map_err(|_| NetworkError::StunFailed("Timeout".to_string()))?
-            .map_err(|e| NetworkError::StunFailed(format!("Receive failed: {}", e)))?;
+        let (len, _) = timeout(
+            Duration::from_millis(self.timeout_ms),
+            self.socket.recv_from(&mut buf),
+        )
+        .await
+        .map_err(|_| NetworkError::StunFailed("Timeout".to_string()))?
+        .map_err(|e| NetworkError::StunFailed(format!("Receive failed: {}", e)))?;
 
         // Parse response
         let mapped_address = parse_binding_response(&buf[..len], &transaction_id)?;
@@ -133,7 +136,10 @@ fn build_binding_request(transaction_id: &[u8; 12]) -> Vec<u8> {
 }
 
 /// Parse a STUN binding response
-fn parse_binding_response(data: &[u8], expected_txn_id: &[u8; 12]) -> Result<SocketAddr, NetworkError> {
+fn parse_binding_response(
+    data: &[u8],
+    expected_txn_id: &[u8; 12],
+) -> Result<SocketAddr, NetworkError> {
     if data.len() < 20 {
         return Err(NetworkError::StunFailed("Response too short".to_string()));
     }
@@ -163,9 +169,7 @@ fn parse_binding_response(data: &[u8], expected_txn_id: &[u8; 12]) -> Result<Soc
     // Parse message length
     let msg_len = u16::from_be_bytes([data[2], data[3]]) as usize;
     if data.len() < 20 + msg_len {
-        return Err(NetworkError::StunFailed(
-            "Message truncated".to_string(),
-        ));
+        return Err(NetworkError::StunFailed("Message truncated".to_string()));
     }
 
     // Parse attributes

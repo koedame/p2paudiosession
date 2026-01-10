@@ -48,7 +48,12 @@ impl FecEncoder {
     /// Generate FEC packet for the current group
     fn generate_fec(&self) -> FecPacket {
         // Find the maximum packet length
-        let max_len = self.current_group.iter().map(|p| p.len()).max().unwrap_or(0);
+        let max_len = self
+            .current_group
+            .iter()
+            .map(|p| p.len())
+            .max()
+            .unwrap_or(0);
 
         // XOR all packets together
         let mut fec_data = vec![0u8; max_len];

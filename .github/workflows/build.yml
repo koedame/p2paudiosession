@@ -70,7 +70,15 @@ jobs:
           restore-keys: |
             cargo-target-${{ runner.os }}-
 
+      - name: Cache Tauri CLI
+        id: cache-tauri-cli
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-tauri*
+          key: tauri-cli-${{ runner.os }}-v2
+
       - name: Install Tauri CLI
+        if: steps.cache-tauri-cli.outputs.cache-hit != 'true'
         run: cargo install tauri-cli --version "^2"
 
       - name: Build Tauri app

@@ -110,7 +110,11 @@ async fn run_host(port: u16, sample_rate: u32, frame_size: u32) -> Result<()> {
     // Start capture (for now just log, full implementation would track connected peers)
     audio_engine.start_capture(None, move |samples, timestamp| {
         if timestamp % 48000 == 0 {
-            tracing::debug!("Captured {} samples at timestamp {}", samples.len(), timestamp);
+            tracing::debug!(
+                "Captured {} samples at timestamp {}",
+                samples.len(),
+                timestamp
+            );
         }
     })?;
 
