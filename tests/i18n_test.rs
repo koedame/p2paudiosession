@@ -2,11 +2,11 @@
 //!
 //! Tests for internationalization functionality.
 
-/// Test: 初回起動時のシステム言語検出
-/// Given システムロケールが日本語（ja）に設定されている
-/// And config.tomlにlanguage設定が存在しない
-/// When ユーザーがjamjamを初めて起動する
-/// Then UIが日本語で表示される
+/// Test: System locale detection on first launch
+/// Given system locale is set to Japanese (ja)
+/// And language setting does not exist in config.toml
+/// When user launches jamjam for the first time
+/// Then UI is displayed in Japanese
 #[test]
 fn test_system_locale_detection() {
     // TODO: Implement when i18n module is available
@@ -20,11 +20,11 @@ fn test_system_locale_detection() {
     // 4. Fall back to "en" if unsupported
 }
 
-/// Test: 設定画面での言語切替
-/// Given UIが英語で表示されている
-/// When ユーザーが言語設定で「日本語」を選択する
-/// Then UIが即座に日本語で表示される
-/// And config.tomlのlanguageが"ja"に更新される
+/// Test: Language switching in settings
+/// Given UI is displayed in English
+/// When user selects "Japanese" in language settings
+/// Then UI is immediately displayed in Japanese
+/// And language in config.toml is updated to "ja"
 #[test]
 fn test_language_switching() {
     // TODO: Implement when i18n module is available
@@ -34,11 +34,11 @@ fn test_language_switching() {
     // 3. Setting is persisted to config file
 }
 
-/// Test: 翻訳キーが存在しない場合のフォールバック
-/// Given UI言語が日本語に設定されている
-/// And 翻訳キーがja.jsonに存在しない
-/// When UIがそのキーを表示しようとする
-/// Then 英語の翻訳が表示される
+/// Test: Fallback when translation key does not exist
+/// Given UI language is set to Japanese
+/// And translation key does not exist in ja.json
+/// When UI attempts to display that key
+/// Then English translation is displayed
 #[test]
 fn test_translation_fallback() {
     // TODO: Implement when i18n module is available
@@ -48,10 +48,10 @@ fn test_translation_fallback() {
     // 3. If still not found, return the key itself
 }
 
-/// Test: 言語設定の永続化
-/// Given ユーザーが言語設定を日本語に変更している
-/// When ユーザーがjamjamを終了して再起動する
-/// Then UIが日本語で表示される
+/// Test: Language setting persistence
+/// Given user has changed language setting to Japanese
+/// When user exits and restarts jamjam
+/// Then UI is displayed in Japanese
 #[test]
 fn test_language_persistence() {
     // TODO: Implement when i18n module is available
@@ -60,8 +60,8 @@ fn test_language_persistence() {
     // 2. Loaded on next application start
 }
 
-/// Test: 対応ロケール一覧
-/// 現在対応しているロケール: ja (日本語), en (英語)
+/// Test: Supported locales list
+/// Currently supported locales: ja (Japanese), en (English)
 #[test]
 fn test_supported_locales() {
     let supported = vec!["ja", "en"];

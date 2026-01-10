@@ -4,10 +4,10 @@
 
 use jamjam::network::{FecDecoder, FecEncoder, FecPacket};
 
-/// Test: Jitterバッファが適応的に調整される
-/// Given Jitterバッファが「適応的」に設定されている
-/// When ネットワークジッターが増加する
-/// Then Jitterバッファサイズが自動的に増加する
+/// Test: Jitter buffer adapts automatically
+/// Given jitter buffer is set to "adaptive"
+/// When network jitter increases
+/// Then jitter buffer size automatically increases
 #[test]
 fn test_jitter_buffer_adaptive() {
     // TODO: Implement when JitterBuffer is available
@@ -15,29 +15,29 @@ fn test_jitter_buffer_adaptive() {
     // based on network conditions.
 }
 
-/// Test: Jitterバッファが最小サイズを下回らない
-/// Given Jitterバッファの最小サイズが2フレームに設定されている
-/// When ネットワークが安定している
-/// Then Jitterバッファは2フレーム以下にならない
+/// Test: Jitter buffer does not go below minimum size
+/// Given jitter buffer minimum size is set to 2 frames
+/// When network is stable
+/// Then jitter buffer does not go below 2 frames
 #[test]
 fn test_jitter_buffer_minimum_size() {
     // TODO: Implement when JitterBuffer is available
     // This test verifies minimum buffer size constraints.
 }
 
-/// Test: Jitterバッファを手動で設定する
-/// When Jitterバッファを「固定: 3フレーム」に設定する
-/// Then Jitterバッファサイズは常に3フレームになる
+/// Test: Set jitter buffer manually
+/// When jitter buffer is set to "fixed: 3 frames"
+/// Then jitter buffer size is always 3 frames
 #[test]
 fn test_jitter_buffer_fixed_mode() {
     // TODO: Implement when JitterBuffer is available
     // This test verifies fixed buffer mode disables auto-adjustment.
 }
 
-/// Test: パケットロスが発生してもFECで復元される
-/// Given FECが有効（冗長度10%）
-/// When 5%のパケットロスが発生する
-/// Then FECにより大部分のパケットが復元される
+/// Test: Packets are recovered by FEC even with packet loss
+/// Given FEC is enabled (10% redundancy)
+/// When 5% packet loss occurs
+/// Then most packets are recovered by FEC
 #[test]
 fn test_fec_packet_recovery() {
     let mut encoder = FecEncoder::with_group_size(4);
@@ -73,10 +73,10 @@ fn test_fec_packet_recovery() {
     assert_eq!(recovered.data, packets[2]);
 }
 
-/// Test: FECで復元できないパケットがある場合
-/// Given FECが有効（冗長度10%）
-/// When 20%のパケットロスが発生する
-/// Then FECでは復元できないパケットが発生する
+/// Test: Some packets cannot be recovered by FEC
+/// Given FEC is enabled (10% redundancy)
+/// When 20% packet loss occurs
+/// Then some packets cannot be recovered by FEC
 #[test]
 fn test_fec_multiple_packet_loss() {
     let mut encoder = FecEncoder::with_group_size(4);
@@ -107,10 +107,10 @@ fn test_fec_multiple_packet_loss() {
     assert!(recovered.is_none(), "Should not recover with 2+ missing packets");
 }
 
-/// Test: LAN環境での遅延
-/// Given 同一LAN内の2台で接続
-/// And プリセット「ultra-low-latency」を使用
-/// Then アプリケーション起因の片道遅延は10ms以下
+/// Test: Latency in LAN environment
+/// Given two machines connected within the same LAN
+/// And using "ultra-low-latency" preset
+/// Then application-induced one-way latency is under 10ms
 #[test]
 fn test_lan_latency_target() {
     // This is a target verification test
@@ -136,10 +136,10 @@ fn test_lan_latency_target() {
     );
 }
 
-/// Test: インターネット環境での遅延
-/// Given インターネット越しに接続
-/// And プリセット「balanced」を使用
-/// Then アプリケーション起因の片道遅延は15ms以下
+/// Test: Latency in internet environment
+/// Given connected over the internet
+/// And using "balanced" preset
+/// Then application-induced one-way latency is under 15ms
 #[test]
 fn test_internet_latency_target() {
     // Balanced preset:
@@ -164,10 +164,10 @@ fn test_internet_latency_target() {
     );
 }
 
-/// Test: 帯域が低下した場合の自動適応
-/// Given 帯域適応が「自動」に設定されている
-/// When 利用可能帯域が低下する
-/// Then ビットレートが自動変更される
+/// Test: Automatic adaptation when bandwidth decreases
+/// Given bandwidth adaptation is set to "auto"
+/// When available bandwidth decreases
+/// Then bitrate is automatically changed
 #[test]
 fn test_bandwidth_adaptation() {
     // TODO: Implement when BandwidthEstimator is available
@@ -175,7 +175,7 @@ fn test_bandwidth_adaptation() {
     // available bandwidth.
 }
 
-/// Test: 接続品質インジケーターの判定
+/// Test: Connection quality indicator determination
 #[test]
 fn test_connection_quality_indicator() {
     // Quality thresholds from spec:

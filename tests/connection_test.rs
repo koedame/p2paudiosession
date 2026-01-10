@@ -4,10 +4,10 @@
 
 use jamjam::network::{Connection, Session, SessionConfig};
 
-/// Test: セッションを作成する
-/// Given jamjamアプリケーションが起動している
-/// When ユーザーが「セッション作成」を選択する
-/// Then セッションが作成される
+/// Test: Create a session
+/// Given jamjam application is running
+/// When user selects "Create Session"
+/// Then session is created
 #[tokio::test]
 async fn test_create_session() {
     let config = SessionConfig::default();
@@ -22,9 +22,9 @@ async fn test_create_session() {
     assert!(addr.port() > 0, "Local port should be assigned");
 }
 
-/// Test: セッション設定
-/// Given デフォルトのセッション設定
-/// Then max_peersは10である
+/// Test: Session configuration
+/// Given default session configuration
+/// Then max_peers is 10
 #[tokio::test]
 async fn test_session_config() {
     let config = SessionConfig::default();
@@ -34,9 +34,9 @@ async fn test_session_config() {
     assert!(config.enable_mixing, "Mixing should be enabled by default");
 }
 
-/// Test: カスタムセッション設定
-/// When max_peersを5に設定する
-/// Then セッションは5人まで参加可能
+/// Test: Custom session configuration
+/// When max_peers is set to 5
+/// Then session allows up to 5 participants
 #[tokio::test]
 async fn test_custom_session_config() {
     let config = SessionConfig {
@@ -50,7 +50,7 @@ async fn test_custom_session_config() {
     assert!(peers.is_empty(), "Initial peers should be empty");
 }
 
-/// Test: 接続統計が初期化されている
+/// Test: Connection stats are initialized
 #[tokio::test]
 async fn test_connection_stats_initial() {
     let conn = Connection::new("127.0.0.1:0").await.expect("Failed to create connection");
@@ -62,7 +62,7 @@ async fn test_connection_stats_initial() {
     assert_eq!(stats.bytes_received, 0, "Initial bytes_received should be 0");
 }
 
-/// Test: 接続が作成されると未接続状態
+/// Test: Connection is in disconnected state when created
 #[tokio::test]
 async fn test_connection_initial_state() {
     let conn = Connection::new("127.0.0.1:0").await.expect("Failed to create connection");

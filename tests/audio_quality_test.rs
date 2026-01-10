@@ -7,9 +7,9 @@ use jamjam::audio::{
     EffectChain, Gain, Recorder, Metronome, MetronomeConfig,
 };
 
-/// Test: サンプルレート48kHzで動作する
-/// When サンプルレートを「48000Hz」に設定する
-/// Then オーディオエンジンは48kHzで動作する
+/// Test: Operates at 48kHz sample rate
+/// When sample rate is set to "48000Hz"
+/// Then audio engine operates at 48kHz
 #[test]
 fn test_sample_rate_48khz() {
     let config = AudioConfig {
@@ -22,9 +22,9 @@ fn test_sample_rate_48khz() {
     assert_eq!(engine.config().sample_rate, 48000);
 }
 
-/// Test: サンプルレート96kHzで動作する
-/// When サンプルレートを「96000Hz」に設定する
-/// Then オーディオエンジンは96kHzで動作する
+/// Test: Operates at 96kHz sample rate
+/// When sample rate is set to "96000Hz"
+/// Then audio engine operates at 96kHz
 #[test]
 fn test_sample_rate_96khz() {
     let config = AudioConfig {
@@ -37,9 +37,9 @@ fn test_sample_rate_96khz() {
     assert_eq!(engine.config().sample_rate, 96000);
 }
 
-/// Test: モノラル入力で動作する
-/// When 入力チャンネルを「モノラル」に設定する
-/// Then 1チャンネルの音声が送信される
+/// Test: Operates with mono input
+/// When input channel is set to "mono"
+/// Then 1-channel audio is transmitted
 #[test]
 fn test_mono_input() {
     let config = CaptureConfig {
@@ -52,9 +52,9 @@ fn test_mono_input() {
     assert_eq!(config.channels, 1);
 }
 
-/// Test: ステレオ入力で動作する
-/// When 入力チャンネルを「ステレオ」に設定する
-/// Then 2チャンネルの音声が送信される
+/// Test: Operates with stereo input
+/// When input channel is set to "stereo"
+/// Then 2-channel audio is transmitted
 #[test]
 fn test_stereo_input() {
     let config = CaptureConfig {
@@ -67,9 +67,9 @@ fn test_stereo_input() {
     assert_eq!(config.channels, 2);
 }
 
-/// Test: フレームサイズ64サンプルで動作する
-/// When フレームサイズを「64 samples」に設定する
-/// Then オーディオバッファは64サンプルになる
+/// Test: Operates with 64 sample frame size
+/// When frame size is set to "64 samples"
+/// Then audio buffer becomes 64 samples
 #[test]
 fn test_frame_size_64() {
     let config = AudioConfig {
@@ -85,9 +85,9 @@ fn test_frame_size_64() {
     assert!((latency_ms - 1.33).abs() < 0.1);
 }
 
-/// Test: フレームサイズ256サンプルで動作する
-/// When フレームサイズを「256 samples」に設定する
-/// Then オーディオバッファは256サンプルになる
+/// Test: Operates with 256 sample frame size
+/// When frame size is set to "256 samples"
+/// Then audio buffer becomes 256 samples
 #[test]
 fn test_frame_size_256() {
     let config = AudioConfig {
@@ -103,7 +103,7 @@ fn test_frame_size_256() {
     assert!((latency_ms - 5.33).abs() < 0.1);
 }
 
-/// Test: ローカルモニタリングを有効/無効にする
+/// Test: Enable/disable local monitoring
 #[test]
 fn test_local_monitoring_toggle() {
     let engine = AudioEngine::new(AudioConfig::default());
@@ -120,7 +120,7 @@ fn test_local_monitoring_toggle() {
     assert!(!engine.is_local_monitoring_enabled());
 }
 
-/// Test: BitDepth設定
+/// Test: BitDepth configuration
 #[test]
 fn test_bit_depth_options() {
     // 16-bit
@@ -145,7 +145,7 @@ fn test_bit_depth_options() {
     assert_eq!(config_f32.bit_depth, BitDepth::F32);
 }
 
-/// Test: エフェクトチェインが動作する
+/// Test: Effect chain works
 #[test]
 fn test_effect_chain() {
     let mut chain = EffectChain::new();
@@ -159,7 +159,7 @@ fn test_effect_chain() {
     assert!((samples[1] + 0.5).abs() < 0.01);
 }
 
-/// Test: レコーダーが作成できる
+/// Test: Recorder can be created
 #[test]
 fn test_recorder_creation() {
     let recorder = Recorder::new(48000, 2, 16);
@@ -168,7 +168,7 @@ fn test_recorder_creation() {
     assert_eq!(recorder.samples_written(), 0);
 }
 
-/// Test: メトロノームが動作する
+/// Test: Metronome works
 #[test]
 fn test_metronome() {
     let config = MetronomeConfig::default();
@@ -187,7 +187,7 @@ fn test_metronome() {
     assert!(!metro.is_running());
 }
 
-/// Test: デフォルト設定が正しい
+/// Test: Default configurations are correct
 #[test]
 fn test_default_configs() {
     let audio_config = AudioConfig::default();
