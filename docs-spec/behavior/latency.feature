@@ -1,3 +1,5 @@
+# This specification is the source of truth. Sync implementation when changed.
+
 Feature: 遅延管理
   jamjamでの遅延に関する振る舞い
 

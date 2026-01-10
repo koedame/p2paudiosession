@@ -98,7 +98,7 @@ impl Recorder {
 
             // Rewrite header with correct size
             update_wav_header(
-                &self.file_path.as_ref().unwrap(),
+                self.file_path.as_ref().unwrap(),
                 self.sample_rate,
                 self.channels,
                 self.bits_per_sample,

@@ -1,3 +1,5 @@
+# This specification is the source of truth. Sync implementation when changed.
+
 Feature: セッション接続
   ミュージシャンがjamjamを使用してセッションに接続する
 

@@ -213,8 +213,8 @@ fn default_plugin_paths() -> Vec<String> {
 /// Plugin host for managing loaded plugins
 pub struct PluginHost {
     plugins: Vec<Box<dyn AudioPlugin>>,
-    sample_rate: f64,
-    block_size: u32,
+    _sample_rate: f64,
+    _block_size: u32,
 }
 
 impl PluginHost {
@@ -222,8 +222,8 @@ impl PluginHost {
     pub fn new(sample_rate: f64, block_size: u32) -> Self {
         Self {
             plugins: Vec::new(),
-            sample_rate,
-            block_size,
+            _sample_rate: sample_rate,
+            _block_size: block_size,
         }
     }
 

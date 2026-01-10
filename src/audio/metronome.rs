@@ -154,7 +154,7 @@ impl Metronome {
         let mut current_beat = self.current_beat.load(Ordering::SeqCst);
         let mut current_measure = self.current_measure.load(Ordering::SeqCst);
 
-        for i in 0..num_samples {
+        for out_sample in output.iter_mut() {
             let pos_in_beat = (sample_pos % self.samples_per_beat as u64) as u32;
 
             // Generate click at the start of each beat
@@ -170,14 +170,14 @@ impl Metronome {
                 let t = pos_in_beat as f32 / self.sample_rate as f32;
                 let envelope = (-t * 30.0).exp(); // Fast decay
                 let sample = (2.0 * PI * freq * t).sin() * envelope * self.config.volume;
-                output[i] = sample;
+                *out_sample = sample;
             }
 
             // Advance position
             sample_pos += 1;
 
             // Check for beat transition
-            if sample_pos % self.samples_per_beat as u64 == 0 {
+            if sample_pos.is_multiple_of(self.samples_per_beat as u64) {
                 current_beat += 1;
                 if current_beat >= self.config.beats_per_measure {
                     current_beat = 0;

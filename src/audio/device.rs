@@ -93,10 +93,11 @@ fn get_device_capabilities(device: &cpal::Device) -> (Vec<u32>, Vec<u16>) {
     for config in configs {
         // Add common sample rates that fall within the supported range
         for rate in &[44100u32, 48000, 96000, 192000] {
-            if *rate >= config.min_sample_rate().0 && *rate <= config.max_sample_rate().0 {
-                if !sample_rates.contains(rate) {
-                    sample_rates.push(*rate);
-                }
+            if *rate >= config.min_sample_rate().0
+                && *rate <= config.max_sample_rate().0
+                && !sample_rates.contains(rate)
+            {
+                sample_rates.push(*rate);
             }
         }
         let ch = config.channels();

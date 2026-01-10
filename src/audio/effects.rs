@@ -314,7 +314,7 @@ impl Delay {
         let new_size = (delay_ms * 0.001 * self.sample_rate) as usize + 1;
         if new_size != self.buffer.len() {
             self.buffer.resize(new_size, 0.0);
-            self.write_pos = self.write_pos % self.buffer.len();
+            self.write_pos %= self.buffer.len();
         }
     }
 }
@@ -449,8 +449,8 @@ impl EffectChain {
         }
     }
 
-    pub fn get(&self, index: usize) -> Option<&Box<dyn Effect>> {
-        self.effects.get(index)
+    pub fn get(&self, index: usize) -> Option<&dyn Effect> {
+        self.effects.get(index).map(|b| b.as_ref())
     }
 
     pub fn get_mut(&mut self, index: usize) -> Option<&mut Box<dyn Effect>> {

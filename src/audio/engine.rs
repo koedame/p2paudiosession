@@ -13,20 +13,15 @@ use super::device::DeviceId;
 use super::error::AudioError;
 
 /// Bit depth for audio samples
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BitDepth {
     /// 16-bit signed integer
     I16,
     /// 24-bit signed integer
     I24,
     /// 32-bit floating point
+    #[default]
     F32,
-}
-
-impl Default for BitDepth {
-    fn default() -> Self {
-        BitDepth::F32
-    }
 }
 
 /// Audio configuration (shared base)

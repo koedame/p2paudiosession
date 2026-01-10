@@ -1,3 +1,5 @@
+# This specification is the source of truth. Sync implementation when changed.
+
 Feature: 国際化
   jamjamはユーザーインターフェースの多言語表示に対応する
 

@@ -1,3 +1,5 @@
+# This specification is the source of truth. Sync implementation when changed.
+
 Feature: 音声品質
   jamjamでの音声品質に関する振る舞い
 

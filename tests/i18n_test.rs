@@ -64,7 +64,7 @@ fn test_language_persistence() {
 /// Currently supported locales: ja (Japanese), en (English)
 #[test]
 fn test_supported_locales() {
-    let supported = vec!["ja", "en"];
+    let supported = ["ja", "en"];
 
     // Verify we have the minimum required locales
     assert!(supported.contains(&"ja"), "Japanese should be supported");
