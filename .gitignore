@@ -1,4 +1,26 @@
+# Build outputs
 /target
+**/target
 
-# Claude Code local settings (may contain user-specific paths)
+# IDE settings
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Claude Code local settings
 .claude/settings.local.json
+
+# Log files
+*.log
