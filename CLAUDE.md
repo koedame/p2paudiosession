@@ -89,12 +89,54 @@ codec は Opus 48kHz / 20ms frame を使用する。
 - mermaid で表現可能な図は mermaid を使用する
 - mermaid に不向きな図（ASCII アート、複雑なレイアウト等）はその限りではない
 
-mermaid 推奨ケース:
+##### 必須で図解すべきケース
+
+**シーケンス図（sequenceDiagram）**
+一連の処理の流れがある場合は必ずシーケンス図を書く：
+- 複数コンポーネント間のメッセージ交換
+- API呼び出しの順序が重要な処理
+- 非同期処理のフロー
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Signaling
+    participant Peer
+    Client->>Signaling: join_room(code)
+    Signaling-->>Client: room_joined(session_info)
+    Signaling->>Peer: participant_joined
+    Peer->>Signaling: ice_candidate
+    Signaling->>Client: ice_candidate
+    Client->>Peer: P2P connection established
+```
+
+**状態遷移図（stateDiagram-v2）**
+状態遷移を管理する必要がある場合は必ずステートマシンを書く：
+- 接続状態の管理
+- セッションライフサイクル
+- UI状態の遷移
+
+```mermaid
+stateDiagram-v2
+    [*] --> Disconnected
+    Disconnected --> Connecting: connect()
+    Connecting --> GatheringCandidates: ICE start
+    GatheringCandidates --> CheckingConnectivity: candidates ready
+    CheckingConnectivity --> Connected: ICE success
+    CheckingConnectivity --> Failed: ICE failed
+    Connected --> Reconnecting: connection lost
+    Reconnecting --> Connected: reconnect success
+    Reconnecting --> Failed: timeout
+    Connected --> Disconnected: disconnect()
+    Failed --> Disconnected: reset()
+```
+
+##### mermaid 推奨ケース
 - フローチャート、シーケンス図、状態遷移図
 - クラス図、ER 図
 - アーキテクチャ概要図
 
-mermaid 不向きケース:
+##### mermaid 不向きケース
 - パケットフォーマットのバイナリレイアウト
 - 細かい位置調整が必要な図
 - 既存の ASCII アートで十分表現できている図
