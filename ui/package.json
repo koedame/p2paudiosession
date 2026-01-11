@@ -1,0 +1,7 @@
+{
+  "name": "jamjam-ui",
+  "private": true,
+  "scripts": {
+    "dev": "npx serve dist -l 1420"
+  }
+}
