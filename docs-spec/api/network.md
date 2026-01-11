@@ -24,6 +24,7 @@ Network モジュールは以下の責務を持つ:
 ```
 network/
 ├── connection.rs       # 接続管理
+├── encryption.rs       # 暗号化レイヤー（AES-GCM, X25519）
 ├── transport.rs        # UDPトランスポート
 ├── session.rs          # セッション管理
 ├── signaling.rs        # シグナリング
@@ -496,6 +497,10 @@ enum NetworkError {
     Disconnected,
     /// 送信バッファ満杯
     SendBufferFull,
+    /// 暗号化エラー
+    EncryptionError(String),
+    /// 鍵交換失敗
+    KeyExchangeFailed(String),
     /// 内部エラー
     Internal(String),
 }

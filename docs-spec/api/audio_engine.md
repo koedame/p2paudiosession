@@ -22,12 +22,16 @@ Audio Engineは以下の責務を持つ:
 
 ```
 audio/
+├── codec.rs        # コーデック（PCM, Opus）
 ├── device.rs       # デバイス管理
 ├── effects.rs      # エフェクト処理
 ├── engine.rs       # オーディオエンジン（キャプチャ・再生）
 ├── error.rs        # エラー型
 ├── metronome.rs    # メトロノーム
-├── plugin.rs       # プラグインホスト
+├── plc.rs          # Packet Loss Concealment
+├── plugin/         # プラグインホスト
+│   ├── mod.rs      # プラグインインターフェース
+│   └── clap_host.rs # CLAPホスト実装
 └── recording.rs    # WAV録音
 ```
 

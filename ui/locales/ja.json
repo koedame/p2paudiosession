@@ -1,0 +1,92 @@
+{
+  "app": {
+    "title": "jamjam",
+    "version": "v0.1.0"
+  },
+  "nav": {
+    "main": "メイン",
+    "mixer": "ミキサー",
+    "settings": "設定",
+    "connection": "接続情報"
+  },
+  "status": {
+    "connected": "接続中",
+    "disconnected": "未接続",
+    "connecting": "接続しています...",
+    "reconnecting": "再接続しています..."
+  },
+  "session": {
+    "title": "セッション",
+    "create": "セッション作成",
+    "join": "セッション参加",
+    "leave": "退出",
+    "port": "ポート",
+    "roomCode": "ルームコード",
+    "password": "パスワード（任意）",
+    "localAddress": "ローカルアドレス",
+    "peers": "参加者",
+    "inviteCode": "招待コード",
+    "copyInvite": "招待をコピー",
+    "directConnect": "直接接続",
+    "address": "アドレス (IP:ポート)"
+  },
+  "audio": {
+    "title": "オーディオ設定",
+    "inputDevice": "入力デバイス",
+    "outputDevice": "出力デバイス",
+    "sampleRate": "サンプルレート",
+    "frameSize": "フレームサイズ",
+    "localMonitoring": "ローカルモニタリング",
+    "start": "オーディオ開始",
+    "stop": "オーディオ停止",
+    "default": "デフォルト"
+  },
+  "mixer": {
+    "title": "ミキサー",
+    "you": "自分",
+    "volume": "音量",
+    "mute": "ミュート",
+    "unmute": "ミュート解除",
+    "solo": "ソロ"
+  },
+  "settings": {
+    "title": "設定",
+    "language": "言語",
+    "preset": "プリセット",
+    "presets": {
+      "ultraLowLatency": "超低遅延",
+      "balanced": "バランス",
+      "highQuality": "高音質"
+    },
+    "advanced": "詳細設定",
+    "codec": "コーデック",
+    "encryption": "暗号化を有効にする (DTLS)",
+    "jitterBuffer": "ジッターバッファ (ms)",
+    "fec": "前方誤り訂正"
+  },
+  "connection": {
+    "title": "接続情報",
+    "rtt": "往復遅延時間",
+    "packetLoss": "パケットロス",
+    "jitter": "ジッター",
+    "bandwidth": "帯域幅",
+    "bytesSent": "送信バイト数",
+    "bytesReceived": "受信バイト数",
+    "packetsSent": "送信パケット数",
+    "packetsReceived": "受信パケット数"
+  },
+  "error": {
+    "generic": "エラーが発生しました",
+    "connectionFailed": "接続に失敗しました",
+    "sessionCreateFailed": "セッションの作成に失敗しました",
+    "audioStartFailed": "オーディオの開始に失敗しました",
+    "deviceNotFound": "デバイスが見つかりません"
+  },
+  "common": {
+    "ok": "OK",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "close": "閉じる",
+    "loading": "読み込み中..."
+  }
+}

@@ -42,8 +42,22 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rand = "0.8"
 
 # WebSocket for signaling
-tokio-tungstenite = "0.24"
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
 futures-util = "0.3"
+
+# TLS support
+tokio-rustls = "0.26"
+rustls = "0.23"
+rustls-pemfile = "2"
+
+# Encryption for P2P data
+aes-gcm = "0.10"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+sha2 = "0.10"
+hkdf = "0.12"
+
+# Dynamic library loading for plugins
+libloading = "0.8"
 
 # JSON for signaling messages
 serde_json = "1"
@@ -62,3 +76,7 @@ codegen-units = 1
 [[bin]]
 name = "jamjam"
 path = "src/main.rs"
+
+[[bin]]
+name = "signaling-server"
+path = "src/bin/signaling_server.rs"

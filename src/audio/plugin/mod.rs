@@ -1,7 +1,10 @@
-//! Audio plugin host interface
+//! Audio plugin hosting module
 //!
-//! Provides abstraction for hosting VST3 and CLAP plugins.
-//! Note: Full implementation requires external plugin SDKs.
+//! Provides support for loading and hosting CLAP and VST3 plugins.
+
+mod clap_host;
+
+pub use clap_host::{ClapPlugin, ClapPluginLoader};
 
 use std::path::Path;
 
@@ -127,13 +130,33 @@ impl PluginScanner {
             "vst3" => PluginFormat::Vst3,
             "clap" => PluginFormat::Clap,
             "component" => PluginFormat::AudioUnit,
+            #[cfg(target_os = "linux")]
+            "so" => {
+                // Check if it's in a CLAP or VST3 directory
+                let path_str = path.to_string_lossy();
+                if path_str.contains("clap") || path_str.contains("CLAP") {
+                    PluginFormat::Clap
+                } else if path_str.contains("vst3") || path_str.contains("VST3") {
+                    PluginFormat::Vst3
+                } else {
+                    return None;
+                }
+            }
             _ => return None,
         };
 
-        // In a real implementation, this would load the plugin to get its info
-        // For now, we just return basic info based on the filename
         let name = path.file_stem()?.to_str()?.to_string();
 
+        // Try to load and get actual plugin info for CLAP plugins
+        if format == PluginFormat::Clap {
+            if let Ok(loader) = ClapPluginLoader::new(path.to_string_lossy().as_ref()) {
+                if let Some(desc) = loader.get_plugin_descriptor(0) {
+                    return Some(desc);
+                }
+            }
+        }
+
+        // Fallback to basic info
         Some(PluginInfo {
             name: name.clone(),
             vendor: "Unknown".to_string(),
@@ -213,8 +236,8 @@ fn default_plugin_paths() -> Vec<String> {
 /// Plugin host for managing loaded plugins
 pub struct PluginHost {
     plugins: Vec<Box<dyn AudioPlugin>>,
-    _sample_rate: f64,
-    _block_size: u32,
+    sample_rate: f64,
+    block_size: u32,
 }
 
 impl PluginHost {
@@ -222,21 +245,45 @@ impl PluginHost {
     pub fn new(sample_rate: f64, block_size: u32) -> Self {
         Self {
             plugins: Vec::new(),
-            _sample_rate: sample_rate,
-            _block_size: block_size,
+            sample_rate,
+            block_size,
         }
     }
 
     /// Load a plugin from path
-    pub fn load_plugin(&mut self, _path: &str) -> Result<usize, AudioError> {
-        // In a real implementation, this would:
-        // 1. Detect plugin format from extension
-        // 2. Load the plugin using appropriate SDK
-        // 3. Initialize and activate the plugin
+    pub fn load_plugin(&mut self, path: &str) -> Result<usize, AudioError> {
+        let extension = Path::new(path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
 
-        Err(AudioError::PluginError(
-            "Plugin loading not yet implemented".to_string(),
-        ))
+        let plugin: Box<dyn AudioPlugin> = match extension {
+            "clap" | "so" => {
+                let loader = ClapPluginLoader::new(path)
+                    .map_err(|e| AudioError::PluginError(e.to_string()))?;
+                let mut plugin = loader
+                    .instantiate(0)
+                    .map_err(|e| AudioError::PluginError(e.to_string()))?;
+                plugin.initialize(self.sample_rate, self.block_size)?;
+                plugin.activate()?;
+                Box::new(plugin)
+            }
+            "vst3" => {
+                return Err(AudioError::PluginError(
+                    "VST3 plugin loading not yet implemented".to_string(),
+                ));
+            }
+            _ => {
+                return Err(AudioError::PluginError(format!(
+                    "Unknown plugin format: {}",
+                    extension
+                )));
+            }
+        };
+
+        let index = self.plugins.len();
+        self.plugins.push(plugin);
+        Ok(index)
     }
 
     /// Unload a plugin
@@ -251,8 +298,6 @@ impl PluginHost {
 
     /// Process audio through all plugins
     pub fn process(&mut self, inputs: &[&[f32]], outputs: &mut [&mut [f32]]) {
-        // Process through each plugin in chain
-        // This is simplified - real implementation would handle routing
         for plugin in &mut self.plugins {
             plugin.process(inputs, outputs);
         }
@@ -267,6 +312,11 @@ impl PluginHost {
     pub fn plugin_info(&self, index: usize) -> Option<&PluginInfo> {
         self.plugins.get(index).map(|p| p.info())
     }
+
+    /// Get mutable reference to plugin
+    pub fn plugin_mut(&mut self, index: usize) -> Option<&mut Box<dyn AudioPlugin>> {
+        self.plugins.get_mut(index)
+    }
 }
 
 #[cfg(test)]
@@ -276,7 +326,6 @@ mod tests {
     #[test]
     fn test_plugin_scanner_creation() {
         let scanner = PluginScanner::new();
-        // Just verify it doesn't panic
         let _plugins = scanner.scan();
     }
 
@@ -289,7 +338,6 @@ mod tests {
     #[test]
     fn test_default_plugin_paths() {
         let paths = default_plugin_paths();
-        // Should have at least some paths
         assert!(!paths.is_empty());
     }
 }

@@ -25,6 +25,7 @@ pub use error::AudioError;
 pub use metronome::{Metronome, MetronomeConfig, MetronomeState, MetronomeSync};
 pub use plc::PcmPlc;
 pub use plugin::{
-    AudioPlugin, PluginFormat, PluginHost, PluginInfo, PluginParameter, PluginScanner,
+    AudioPlugin, ClapPlugin, ClapPluginLoader, PluginFormat, PluginHost, PluginInfo,
+    PluginParameter, PluginScanner,
 };
 pub use recording::{Recorder, RecordingInfo};

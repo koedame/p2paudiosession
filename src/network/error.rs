@@ -40,4 +40,10 @@ pub enum NetworkError {
 
     #[error("Peer not found: {0}")]
     PeerNotFound(String),
+
+    #[error("Encryption error: {0}")]
+    EncryptionError(String),
+
+    #[error("Key exchange failed: {0}")]
+    KeyExchangeFailed(String),
 }

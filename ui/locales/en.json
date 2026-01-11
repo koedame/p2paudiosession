@@ -1,0 +1,92 @@
+{
+  "app": {
+    "title": "jamjam",
+    "version": "v0.1.0"
+  },
+  "nav": {
+    "main": "Main",
+    "mixer": "Mixer",
+    "settings": "Settings",
+    "connection": "Connection"
+  },
+  "status": {
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "connecting": "Connecting...",
+    "reconnecting": "Reconnecting..."
+  },
+  "session": {
+    "title": "Session",
+    "create": "Create Session",
+    "join": "Join Session",
+    "leave": "Leave",
+    "port": "Port",
+    "roomCode": "Room Code",
+    "password": "Password (optional)",
+    "localAddress": "Local Address",
+    "peers": "Peers",
+    "inviteCode": "Invite Code",
+    "copyInvite": "Copy Invite",
+    "directConnect": "Direct Connect",
+    "address": "Address (IP:Port)"
+  },
+  "audio": {
+    "title": "Audio Settings",
+    "inputDevice": "Input Device",
+    "outputDevice": "Output Device",
+    "sampleRate": "Sample Rate",
+    "frameSize": "Frame Size",
+    "localMonitoring": "Local Monitoring",
+    "start": "Start Audio",
+    "stop": "Stop Audio",
+    "default": "Default"
+  },
+  "mixer": {
+    "title": "Mixer",
+    "you": "You",
+    "volume": "Volume",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "solo": "Solo"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "preset": "Preset",
+    "presets": {
+      "ultraLowLatency": "Ultra Low Latency",
+      "balanced": "Balanced",
+      "highQuality": "High Quality"
+    },
+    "advanced": "Advanced Settings",
+    "codec": "Codec",
+    "encryption": "Enable Encryption (DTLS)",
+    "jitterBuffer": "Jitter Buffer (ms)",
+    "fec": "Forward Error Correction"
+  },
+  "connection": {
+    "title": "Connection Info",
+    "rtt": "Round Trip Time",
+    "packetLoss": "Packet Loss",
+    "jitter": "Jitter",
+    "bandwidth": "Bandwidth",
+    "bytesSent": "Bytes Sent",
+    "bytesReceived": "Bytes Received",
+    "packetsSent": "Packets Sent",
+    "packetsReceived": "Packets Received"
+  },
+  "error": {
+    "generic": "An error occurred",
+    "connectionFailed": "Failed to connect",
+    "sessionCreateFailed": "Failed to create session",
+    "audioStartFailed": "Failed to start audio",
+    "deviceNotFound": "Device not found"
+  },
+  "common": {
+    "ok": "OK",
+    "cancel": "Cancel",
+    "save": "Save",
+    "close": "Close",
+    "loading": "Loading..."
+  }
+}

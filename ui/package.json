@@ -1,7 +1,20 @@
 {
   "name": "jamjam-ui",
   "private": true,
+  "version": "0.1.0",
+  "type": "module",
   "scripts": {
-    "dev": "npx serve dist -l 1420"
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "i18next": "^23.16.5",
+    "i18next-browser-languagedetector": "^8.0.2"
+  },
+  "devDependencies": {
+    "@tauri-apps/api": "^2.2.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
   }
 }
