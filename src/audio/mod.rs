@@ -12,7 +12,9 @@ mod plc;
 mod plugin;
 mod recording;
 
-pub use codec::{create_codec, AudioCodec, CodecConfig, CodecError, CodecType, OpusCodec, PcmCodec};
+pub use codec::{
+    create_codec, AudioCodec, CodecConfig, CodecError, CodecType, OpusCodec, PcmCodec,
+};
 pub use device::{list_input_devices, list_output_devices, AudioDevice, DeviceId};
 pub use effects::{
     db_to_linear, linear_to_db, Compressor, Delay, Effect, EffectChain, Gain, HighPassFilter,

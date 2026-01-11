@@ -53,9 +53,7 @@ pub enum JitterBufferResult {
         payload: Vec<u8>,
     },
     /// Packet was lost (not received in time)
-    Lost {
-        sequence: u32,
-    },
+    Lost { sequence: u32 },
     /// Buffer underrun (not enough packets buffered yet)
     Underrun,
 }

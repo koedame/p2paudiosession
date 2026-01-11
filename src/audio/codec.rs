@@ -159,10 +159,7 @@ impl PcmCodec {
 impl AudioCodec for PcmCodec {
     fn encode(&mut self, samples: &[f32]) -> Result<Vec<u8>, CodecError> {
         // Convert f32 samples to little-endian bytes
-        let bytes: Vec<u8> = samples
-            .iter()
-            .flat_map(|&s| s.to_le_bytes())
-            .collect();
+        let bytes: Vec<u8> = samples.iter().flat_map(|&s| s.to_le_bytes()).collect();
         Ok(bytes)
     }
 
@@ -239,20 +236,22 @@ mod opus_impl {
             };
 
             // Use LowDelay application for minimum latency
-            let mut encoder = opus::Encoder::new(
-                config.sample_rate,
-                channels,
-                opus::Application::LowDelay,
-            )
-            .map_err(|e| CodecError::InitializationFailed(format!("Encoder init failed: {}", e)))?;
+            let mut encoder =
+                opus::Encoder::new(config.sample_rate, channels, opus::Application::LowDelay)
+                    .map_err(|e| {
+                        CodecError::InitializationFailed(format!("Encoder init failed: {}", e))
+                    })?;
 
             // Set bitrate
             encoder
                 .set_bitrate(opus::Bitrate::Bits(config.bitrate as i32))
-                .map_err(|e| CodecError::InitializationFailed(format!("Set bitrate failed: {}", e)))?;
+                .map_err(|e| {
+                    CodecError::InitializationFailed(format!("Set bitrate failed: {}", e))
+                })?;
 
-            let decoder = opus::Decoder::new(config.sample_rate, channels)
-                .map_err(|e| CodecError::InitializationFailed(format!("Decoder init failed: {}", e)))?;
+            let decoder = opus::Decoder::new(config.sample_rate, channels).map_err(|e| {
+                CodecError::InitializationFailed(format!("Decoder init failed: {}", e))
+            })?;
 
             // Pre-allocate encode buffer (max Opus packet size is ~1275 bytes)
             let encode_buffer = vec![0u8; 1500];
