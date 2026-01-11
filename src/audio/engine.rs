@@ -281,10 +281,17 @@ impl AudioEngine {
             .build_output_stream(
                 &stream_config,
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                    let mut cons = consumer_clone.lock().unwrap();
-                    // Read samples from ring buffer
-                    for sample in data.iter_mut() {
-                        *sample = cons.try_pop().unwrap_or(0.0);
+                    // Use try_lock to avoid blocking in real-time audio callback
+                    if let Ok(mut cons) = consumer_clone.try_lock() {
+                        // Read samples from ring buffer
+                        for sample in data.iter_mut() {
+                            *sample = cons.try_pop().unwrap_or(0.0);
+                        }
+                    } else {
+                        // Lock not available, output silence to avoid blocking
+                        for sample in data.iter_mut() {
+                            *sample = 0.0;
+                        }
                     }
                 },
                 err_fn,

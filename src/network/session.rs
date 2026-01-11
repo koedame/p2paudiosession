@@ -153,6 +153,10 @@ impl Session {
     }
 
     /// Start the session
+    ///
+    /// # Thread Safety
+    /// This method takes `&mut self`, ensuring exclusive access.
+    /// The `running` flag is set atomically before spawning the receive loop.
     pub fn start(&mut self) {
         if self.running.load(Ordering::SeqCst) {
             return;
@@ -164,6 +168,11 @@ impl Session {
     }
 
     /// Stop the session
+    ///
+    /// # Thread Safety
+    /// This method takes `&mut self`, ensuring exclusive access.
+    /// The `running` flag is set to false atomically, which signals the
+    /// receive loop to terminate. The abort is a fallback.
     pub fn stop(&mut self) {
         self.running.store(false, Ordering::SeqCst);
 

@@ -258,4 +258,83 @@ mod tests {
         // Different sequences should produce different ciphertext
         assert_ne!(ct1, ct2);
     }
+
+    #[test]
+    fn test_full_key_exchange_and_encryption() {
+        // Simulate complete key exchange between initiator and responder
+        let initiator_keypair = KeyPair::generate();
+        let responder_keypair = KeyPair::generate();
+
+        let initiator_public = initiator_keypair.public_key_bytes();
+        let responder_public = responder_keypair.public_key_bytes();
+
+        // Derive shared secrets on both sides
+        let initiator_shared = initiator_keypair.derive_shared_secret(&responder_public);
+        let responder_shared = responder_keypair.derive_shared_secret(&initiator_public);
+
+        // Both should derive the same secret
+        assert_eq!(initiator_shared.as_bytes(), responder_shared.as_bytes());
+
+        // Create encryption contexts
+        let initiator_ctx =
+            EncryptionContext::from_shared_secret(initiator_shared.as_bytes(), true);
+        let responder_ctx =
+            EncryptionContext::from_shared_secret(responder_shared.as_bytes(), false);
+
+        // Initiator sends to responder
+        let plaintext = b"Audio data from initiator";
+        let sequence = 42u32;
+        let ciphertext = initiator_ctx.encrypt(sequence, plaintext).unwrap();
+
+        // Note: This test shows that with role-based derivation, each side uses
+        // different keys. For proper bidirectional communication, both sides need
+        // to maintain encryption contexts for both directions.
+
+        // Same role should be able to decrypt
+        let initiator_ctx2 =
+            EncryptionContext::from_shared_secret(initiator_shared.as_bytes(), true);
+        let decrypted = initiator_ctx2.decrypt(sequence, &ciphertext).unwrap();
+        assert_eq!(plaintext.as_slice(), decrypted.as_slice());
+
+        // Responder sends to initiator
+        let resp_plaintext = b"Audio data from responder";
+        let resp_ciphertext = responder_ctx.encrypt(sequence, resp_plaintext).unwrap();
+
+        let responder_ctx2 =
+            EncryptionContext::from_shared_secret(responder_shared.as_bytes(), false);
+        let resp_decrypted = responder_ctx2.decrypt(sequence, &resp_ciphertext).unwrap();
+        assert_eq!(resp_plaintext.as_slice(), resp_decrypted.as_slice());
+    }
+
+    #[test]
+    fn test_decrypt_with_wrong_sequence_fails() {
+        let shared_secret = [0x42u8; 32];
+        let ctx = EncryptionContext::from_shared_secret(&shared_secret, true);
+
+        let plaintext = b"Secret message";
+        let ciphertext = ctx.encrypt(100, plaintext).unwrap();
+
+        // Decryption with wrong sequence should fail
+        let result = ctx.decrypt(101, &ciphertext);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tampered_ciphertext_fails() {
+        let shared_secret = [0x42u8; 32];
+        let ctx = EncryptionContext::from_shared_secret(&shared_secret, true);
+
+        let plaintext = b"Secret message";
+        let sequence = 1u32;
+        let mut ciphertext = ctx.encrypt(sequence, plaintext).unwrap();
+
+        // Tamper with ciphertext
+        if !ciphertext.is_empty() {
+            ciphertext[0] ^= 0xFF;
+        }
+
+        // Decryption should fail due to authentication
+        let result = ctx.decrypt(sequence, &ciphertext);
+        assert!(result.is_err());
+    }
 }

@@ -176,7 +176,7 @@ struct PacketStats {
 /// Jitterバッファ設定
 #[derive(Debug, Clone)]
 pub struct JitterBufferConfig {
-    /// 最小バッファ遅延（フレーム数、デフォルト: 1）
+    /// 最小バッファ遅延（フレーム数、デフォルト: 1、必ず1以上）
     pub min_delay_frames: u32,
     /// 最大バッファ遅延（フレーム数、デフォルト: 10）
     pub max_delay_frames: u32,
@@ -185,7 +185,21 @@ pub struct JitterBufferConfig {
     /// フレーム長（ミリ秒、デフォルト: 2.5）
     pub frame_duration_ms: f32,
 }
+
+impl JitterBufferConfig {
+    /// 設定を検証・正規化
+    ///
+    /// 以下の正規化が行われる:
+    /// - min_delay_frames が 0 の場合は 1 に補正
+    /// - max_delay_frames が min_delay_frames 未満の場合は min に補正
+    /// - initial_delay_frames が範囲外の場合はクランプ
+    /// - frame_duration_ms が 0 以下の場合はデフォルト値に補正
+    pub fn validated(self) -> Self;
+}
 ```
+
+**注意**: `JitterBuffer::with_config()` は内部で `validated()` を呼び出すため、
+不正な設定値は自動的に正規化される。
 
 ### 5.2 取得結果
 

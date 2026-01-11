@@ -9,7 +9,7 @@ use std::time::Instant;
 /// Configuration for the jitter buffer
 #[derive(Debug, Clone)]
 pub struct JitterBufferConfig {
-    /// Minimum buffer delay in frames (default: 1)
+    /// Minimum buffer delay in frames (default: 1, must be >= 1)
     pub min_delay_frames: u32,
     /// Maximum buffer delay in frames (default: 10)
     pub max_delay_frames: u32,
@@ -17,6 +17,35 @@ pub struct JitterBufferConfig {
     pub initial_delay_frames: u32,
     /// Frame duration in milliseconds
     pub frame_duration_ms: f32,
+}
+
+impl JitterBufferConfig {
+    /// Validate and normalize the configuration
+    ///
+    /// Returns a validated config with:
+    /// - min_delay_frames >= 1 (0 means no buffering, which defeats the purpose)
+    /// - max_delay_frames >= min_delay_frames
+    /// - initial_delay_frames clamped between min and max
+    /// - frame_duration_ms > 0
+    pub fn validated(self) -> Self {
+        let min_delay_frames = self.min_delay_frames.max(1);
+        let max_delay_frames = self.max_delay_frames.max(min_delay_frames);
+        let initial_delay_frames = self
+            .initial_delay_frames
+            .clamp(min_delay_frames, max_delay_frames);
+        let frame_duration_ms = if self.frame_duration_ms > 0.0 {
+            self.frame_duration_ms
+        } else {
+            2.5 // Default fallback
+        };
+
+        Self {
+            min_delay_frames,
+            max_delay_frames,
+            initial_delay_frames,
+            frame_duration_ms,
+        }
+    }
 }
 
 impl Default for JitterBufferConfig {
@@ -95,7 +124,10 @@ impl JitterBuffer {
     }
 
     /// Create a new jitter buffer with custom configuration
+    ///
+    /// The configuration is validated to ensure sensible values.
     pub fn with_config(config: JitterBufferConfig) -> Self {
+        let config = config.validated();
         Self {
             packets: BTreeMap::new(),
             next_play_sequence: None,
@@ -445,6 +477,49 @@ mod tests {
         assert!(buffer.is_empty());
         assert!(!buffer.is_playing());
         assert_eq!(buffer.stats().packets_inserted, 0);
+    }
+
+    #[test]
+    fn test_config_validation() {
+        // Test that zero min_delay is corrected to 1
+        let config = JitterBufferConfig {
+            min_delay_frames: 0,
+            max_delay_frames: 5,
+            initial_delay_frames: 2,
+            frame_duration_ms: 2.5,
+        };
+        let validated = config.validated();
+        assert_eq!(validated.min_delay_frames, 1);
+
+        // Test that max_delay < min_delay is corrected
+        let config = JitterBufferConfig {
+            min_delay_frames: 5,
+            max_delay_frames: 2,
+            initial_delay_frames: 3,
+            frame_duration_ms: 2.5,
+        };
+        let validated = config.validated();
+        assert!(validated.max_delay_frames >= validated.min_delay_frames);
+
+        // Test that initial_delay is clamped
+        let config = JitterBufferConfig {
+            min_delay_frames: 2,
+            max_delay_frames: 5,
+            initial_delay_frames: 10,
+            frame_duration_ms: 2.5,
+        };
+        let validated = config.validated();
+        assert!(validated.initial_delay_frames <= validated.max_delay_frames);
+
+        // Test that negative frame_duration is corrected
+        let config = JitterBufferConfig {
+            min_delay_frames: 1,
+            max_delay_frames: 5,
+            initial_delay_frames: 2,
+            frame_duration_ms: -1.0,
+        };
+        let validated = config.validated();
+        assert!(validated.frame_duration_ms > 0.0);
     }
 
     #[test]

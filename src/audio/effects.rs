@@ -582,4 +582,64 @@ mod tests {
         // Samples above threshold should be compressed
         assert!(samples.iter().all(|&s| s.abs() < 0.6));
     }
+
+    #[test]
+    fn test_noise_gate_opens_above_threshold() {
+        let mut gate = NoiseGate::new(48000.0);
+        gate.threshold_db = -40.0;
+
+        // Loud signal (0.5 = -6dB, well above -40dB threshold)
+        let mut samples = vec![0.5; 1000];
+        gate.process(&mut samples);
+
+        // Gate should be open, signal should pass (with attack time smoothing)
+        // After enough samples, the gate should be fully open
+        let last_samples: Vec<f32> = samples.iter().rev().take(100).cloned().collect();
+        assert!(last_samples.iter().any(|&s| s > 0.3));
+    }
+
+    #[test]
+    fn test_noise_gate_closes_below_threshold() {
+        let mut gate = NoiseGate::new(48000.0);
+        gate.threshold_db = -20.0; // -20dB = 0.1 linear
+
+        // First, open the gate with a loud signal
+        let mut loud = vec![0.5; 1000];
+        gate.process(&mut loud);
+
+        // Quiet signal (0.01 = -40dB, well below -20dB threshold)
+        let mut quiet = vec![0.01; 5000];
+        gate.process(&mut quiet);
+
+        // After release time, gate should be mostly closed
+        let last_sample = *quiet.last().unwrap();
+        assert!(last_sample < 0.01, "Gate should attenuate quiet signal");
+    }
+
+    #[test]
+    fn test_noise_gate_disabled() {
+        let mut gate = NoiseGate::new(48000.0);
+        gate.threshold_db = -20.0;
+        gate.set_enabled(false);
+
+        let mut samples = vec![0.001; 100]; // Very quiet
+        let original = samples.clone();
+        gate.process(&mut samples);
+
+        // When disabled, samples should pass through unchanged
+        assert_eq!(samples, original);
+    }
+
+    #[test]
+    fn test_high_pass_filter() {
+        let mut hpf = HighPassFilter::new(1000.0, 48000.0);
+
+        // DC offset should be removed
+        let mut samples = vec![1.0; 1000];
+        hpf.process(&mut samples);
+
+        // After settling, output should approach zero for DC input
+        let last_samples: Vec<f32> = samples.iter().rev().take(100).cloned().collect();
+        assert!(last_samples.iter().all(|&s| s.abs() < 0.1));
+    }
 }
