@@ -39,7 +39,8 @@ struct BufferedPacket {
     timestamp: u32,
     /// Encoded audio payload
     payload: Vec<u8>,
-    /// Time when packet was received
+    /// Time when packet was received (for future jitter statistics)
+    #[allow(dead_code)]
     received_at: Instant,
 }
 

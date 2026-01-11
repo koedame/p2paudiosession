@@ -139,7 +139,7 @@ impl SequenceTracker {
     /// Only works for sequences within the window
     pub fn was_received(&self, sequence: u32) -> bool {
         let diff = self.sequence_diff(self.highest_sequence, sequence);
-        if diff < 0 || diff >= 64 {
+        if !(0..64).contains(&diff) {
             false
         } else {
             let mask = 1u64 << diff;
