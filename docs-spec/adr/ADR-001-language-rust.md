@@ -1,3 +1,8 @@
+---
+sidebar_label: "ADR-001: Rust採用"
+sidebar_position: 1
+---
+
 <!-- このドキュメントは実装の正です。変更時は実装も同期すること -->
 
 # ADR-001: Rust採用

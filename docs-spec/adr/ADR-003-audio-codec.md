@@ -1,3 +1,8 @@
+---
+sidebar_label: "ADR-003: Audio Codec"
+sidebar_position: 3
+---
+
 <!-- このドキュメントは実装の正です。変更時は実装も同期すること -->
 
 # ADR-003: 音声コーデック選択（複数対応）

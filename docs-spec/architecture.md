@@ -1,3 +1,8 @@
+---
+sidebar_label: Architecture
+sidebar_position: 2
+---
+
 <!-- このドキュメントは実装の正です。変更時は実装も同期すること -->
 
 # architecture.md
@@ -610,8 +615,8 @@ TOML形式を使用する。
 
 | プラットフォーム | パス |
 |-----------------|------|
-| デスクトップ | ui/locales/{lang}.json |
-| モバイル | lib/l10n/app_{lang}.arb |
+| デスクトップ | `ui/locales/{lang}.json` |
+| モバイル | `lib/l10n/app_{lang}.arb` |
 
 ### 15.4 言語検出
 

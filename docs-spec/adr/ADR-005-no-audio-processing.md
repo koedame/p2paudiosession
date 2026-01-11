@@ -1,3 +1,8 @@
+---
+sidebar_label: "ADR-005: No Audio Processing"
+sidebar_position: 5
+---
+
 <!-- このドキュメントは実装の正です。変更時は実装も同期すること -->
 
 # ADR-005: 音声処理を行わない方針

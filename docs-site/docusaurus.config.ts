@@ -46,6 +46,20 @@ const config: Config = {
     ],
   ],
 
+  plugins: [
+    [
+      '@docusaurus/plugin-content-docs',
+      {
+        id: 'spec',
+        path: '../docs-spec',
+        routeBasePath: 'spec',
+        sidebarPath: './sidebarsSpec.ts',
+        editUrl:
+          'https://github.com/koedame/p2paudiosession/edit/main/',
+      },
+    ],
+  ],
+
   themeConfig: {
     colorMode: {
       respectPrefersColorScheme: true,
@@ -60,9 +74,11 @@ const config: Config = {
           label: 'Docs',
         },
         {
-          href: 'https://github.com/koedame/p2paudiosession/tree/main/docs-spec',
-          label: 'Spec',
+          type: 'docSidebar',
+          sidebarId: 'specSidebar',
+          docsPluginId: 'spec',
           position: 'left',
+          label: 'Spec',
         },
         {
           href: 'https://github.com/koedame/p2paudiosession',
@@ -92,15 +108,15 @@ const config: Config = {
           items: [
             {
               label: 'Architecture',
-              href: 'https://github.com/koedame/p2paudiosession/blob/main/docs-spec/architecture.md',
+              to: '/spec/architecture',
             },
             {
               label: 'API Specifications',
-              href: 'https://github.com/koedame/p2paudiosession/tree/main/docs-spec/api',
+              to: '/spec/api/audio_engine',
             },
             {
               label: 'ADR (Design Decisions)',
-              href: 'https://github.com/koedame/p2paudiosession/tree/main/docs-spec/adr',
+              to: '/spec/adr/ADR-001-language-rust',
             },
           ],
         },

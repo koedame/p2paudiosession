@@ -1,3 +1,8 @@
+---
+sidebar_label: Signaling
+sidebar_position: 3
+---
+
 <!-- このドキュメントは実装の正です。変更時は実装も同期すること -->
 
 # Signaling API

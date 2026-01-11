@@ -1,3 +1,8 @@
+---
+sidebar_label: Overview
+sidebar_position: 1
+---
+
 <!-- このドキュメントは実装の正です。変更時は実装も同期すること -->
 
 # jamjam Specification Documents
@@ -12,9 +17,9 @@
 | ファイル | 説明 |
 |---------|------|
 | [architecture.md](./architecture.md) | 技術構成（最重要） |
-| [adr/](./adr/) | 設計判断記録（ADR） |
-| [api/](./api/) | API境界定義 |
-| [behavior/](./behavior/) | 振る舞い定義（BDD/Gherkin） |
+| [adr/](./adr/ADR-001-language-rust.md) | 設計判断記録（ADR） |
+| [api/](./api/audio_engine.md) | API境界定義 |
+| behavior/ | 振る舞い定義（BDD/Gherkin） |
 
 ---
 
@@ -66,6 +71,6 @@
 
 ## 開発者向けドキュメント
 
-開発者向けの解説資料（ガイド、チュートリアル等）は [docs-site/](../docs-site/) を参照。
+開発者向けの解説資料（ガイド、チュートリアル等）は [Docs](/docs/intro) を参照。
 
 > docs-site/ の内容は仕様ではない。実装の正は常に本ディレクトリ（docs-spec/）である。
