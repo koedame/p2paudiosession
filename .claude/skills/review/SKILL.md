@@ -1,6 +1,6 @@
 ---
 name: review
-description: Review specification documents for compliance with project guidelines. Use when checking docs-spec/ for ambiguous expressions or missing required sections.
+description: Review specification and developer documents for compliance with project guidelines. Use when checking docs-spec/ and docs-site/docs/ for ambiguous expressions or missing required sections.
 allowed-tools: Read, Glob, Grep
 ---
 
@@ -10,7 +10,7 @@ allowed-tools: Read, Glob, Grep
 
 1. Determine the review target:
    - If argument is provided: Review that specific file
-   - If no argument: Find all files in `docs-spec/` directory using Glob
+   - If no argument: Find all files in `docs-spec/` and `docs-site/docs/` directories using Glob (exclude node_modules)
 
 2. Read each target file
 
@@ -111,6 +111,32 @@ Flag if:
 
 ---
 
+### docs-site Files (docs-site/docs/**/*.md)
+
+Checks for developer documentation:
+
+#### Ambiguous Expression Check
+Apply same prohibited words as Common Checks.
+
+#### Note Banner Check
+Required at top of each file:
+- [ ] Contains `:::note` banner pointing to docs-spec as source of truth
+
+Flag if:
+- Note banner is missing
+- Note banner doesn't reference docs-spec
+
+#### Internal Link Check
+Flag if:
+- Links to `/docs/...` paths that don't correspond to existing files
+- Broken relative links
+
+#### Consistency Check (intro.md only)
+If file contains implementation status table:
+- [ ] Phase statuses should match docs-spec/README.md
+
+---
+
 ## Example Output
 
 ```
@@ -127,4 +153,17 @@ Flag if:
 ### Summary
 - 2 issues found
 - 1 required section missing
+```
+
+```
+## docs-site/docs/intro.md
+
+### Issues Found
+- [Line 14] Ambiguous expression detected
+  - Current: "超低レイテンシ"
+  - Suggested: Use specific value (e.g., "10ms以下" as already stated on line 22)
+
+### OK
+- Note banner present (line 7-10)
+- Internal links valid
 ```
