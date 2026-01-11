@@ -19,6 +19,7 @@ use super::error::NetworkError;
 use super::transport::UdpTransport;
 
 /// Size of the authentication tag (AES-GCM)
+#[allow(dead_code)]
 const TAG_SIZE: usize = 16;
 
 /// Size of the nonce (96 bits for AES-GCM)
@@ -229,7 +230,7 @@ mod tests {
         let shared_secret = [0x42u8; 32]; // Dummy shared secret
 
         let sender_ctx = EncryptionContext::from_shared_secret(&shared_secret, true);
-        let receiver_ctx = EncryptionContext::from_shared_secret(&shared_secret, false);
+        let _receiver_ctx = EncryptionContext::from_shared_secret(&shared_secret, false);
 
         let plaintext = b"Hello, encrypted world!";
         let sequence = 12345u32;

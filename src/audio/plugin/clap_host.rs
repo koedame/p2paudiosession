@@ -7,7 +7,7 @@ use std::ffi::{c_char, c_void, CStr, CString};
 use std::ptr;
 
 use libloading::{Library, Symbol};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
 use super::{AudioError, AudioPlugin, PluginFormat, PluginInfo, PluginParameter};
 
@@ -141,6 +141,7 @@ const CLAP_PLUGIN_FACTORY_ID: &[u8] = b"clap.plugin-factory\0";
 
 /// CLAP plugin loader
 pub struct ClapPluginLoader {
+    #[allow(dead_code)]
     library: Library,
     entry: *const ClapPluginEntry,
     factory: *const ClapPluginFactory,
@@ -174,14 +175,14 @@ impl ClapPluginLoader {
         if let Some(init) = entry_ref.init {
             let path_cstr = CString::new(path)
                 .map_err(|_| AudioError::PluginError("Invalid path string".to_string()))?;
-            if !unsafe { init(path_cstr.as_ptr()) } {
+            if !init(path_cstr.as_ptr()) {
                 return Err(AudioError::PluginError("Plugin init failed".to_string()));
             }
         }
 
         // Get the factory
         let factory = if let Some(get_factory) = entry_ref.get_factory {
-            let factory = unsafe { get_factory(CLAP_PLUGIN_FACTORY_ID.as_ptr() as *const c_char) };
+            let factory = get_factory(CLAP_PLUGIN_FACTORY_ID.as_ptr() as *const c_char);
             if factory.is_null() {
                 return Err(AudioError::PluginError(
                     "Failed to get plugin factory".to_string(),
@@ -208,7 +209,7 @@ impl ClapPluginLoader {
     pub fn plugin_count(&self) -> u32 {
         let factory = unsafe { &*self.factory };
         if let Some(get_count) = factory.get_plugin_count {
-            unsafe { get_count(self.factory) }
+            get_count(self.factory)
         } else {
             0
         }
@@ -219,7 +220,7 @@ impl ClapPluginLoader {
         let factory = unsafe { &*self.factory };
         let get_desc = factory.get_plugin_descriptor?;
 
-        let desc_ptr = unsafe { get_desc(self.factory, index) };
+        let desc_ptr = get_desc(self.factory, index);
         if desc_ptr.is_null() {
             return None;
         }
@@ -261,7 +262,7 @@ impl ClapPluginLoader {
             AudioError::PluginError("No get_plugin_descriptor function".to_string())
         })?;
 
-        let desc_ptr = unsafe { get_desc(self.factory, index) };
+        let desc_ptr = get_desc(self.factory, index);
         if desc_ptr.is_null() {
             return Err(AudioError::PluginError(
                 "Plugin descriptor is null".to_string(),
@@ -279,7 +280,7 @@ impl ClapPluginLoader {
             .create_plugin
             .ok_or_else(|| AudioError::PluginError("No create_plugin function".to_string()))?;
 
-        let plugin_ptr = unsafe { create(self.factory, host_ptr, desc.id) };
+        let plugin_ptr = create(self.factory, host_ptr, desc.id);
         if plugin_ptr.is_null() {
             // Clean up host
             unsafe { drop(Box::from_raw(host_ptr)) };
@@ -291,10 +292,10 @@ impl ClapPluginLoader {
         // Initialize the plugin
         let plugin = unsafe { &*plugin_ptr };
         if let Some(init) = plugin.init {
-            if !unsafe { init(plugin_ptr) } {
+            if !init(plugin_ptr) {
                 // Clean up
                 if let Some(destroy) = plugin.destroy {
-                    unsafe { destroy(plugin_ptr) };
+                    destroy(plugin_ptr);
                 }
                 unsafe { drop(Box::from_raw(host_ptr)) };
                 return Err(AudioError::PluginError("Plugin init failed".to_string()));
@@ -323,7 +324,7 @@ impl Drop for ClapPluginLoader {
         // Deinitialize the plugin entry
         let entry = unsafe { &*self.entry };
         if let Some(deinit) = entry.deinit {
-            unsafe { deinit() };
+            deinit();
         }
         debug!("Unloaded CLAP plugin: {}", self.path);
     }
@@ -405,7 +406,7 @@ impl AudioPlugin for ClapPluginInstance {
         let plugin = unsafe { &*self.plugin };
         if let Some(activate) = plugin.activate {
             // Activate with default settings
-            if !unsafe { activate(self.plugin, 48000.0, 1, 4096) } {
+            if !activate(self.plugin, 48000.0, 1, 4096) {
                 return Err(AudioError::PluginError(
                     "Plugin activation failed".to_string(),
                 ));
@@ -413,7 +414,7 @@ impl AudioPlugin for ClapPluginInstance {
         }
 
         if let Some(start) = plugin.start_processing {
-            if !unsafe { start(self.plugin) } {
+            if !start(self.plugin) {
                 return Err(AudioError::PluginError(
                     "Plugin start_processing failed".to_string(),
                 ));
@@ -435,13 +436,13 @@ impl AudioPlugin for ClapPluginInstance {
 
         if self.processing {
             if let Some(stop) = plugin.stop_processing {
-                unsafe { stop(self.plugin) };
+                stop(self.plugin);
             }
             self.processing = false;
         }
 
         if let Some(deactivate) = plugin.deactivate {
-            unsafe { deactivate(self.plugin) };
+            deactivate(self.plugin);
         }
 
         self.activated = false;
@@ -502,7 +503,7 @@ impl AudioPlugin for ClapPluginInstance {
             out_events: ptr::null(),
         };
 
-        let _status = unsafe { process_fn(self.plugin, &process) };
+        let _status = process_fn(self.plugin, &process);
     }
 
     fn num_parameters(&self) -> usize {
@@ -545,7 +546,7 @@ impl Drop for ClapPluginInstance {
         // Destroy the plugin
         let plugin = unsafe { &*self.plugin };
         if let Some(destroy) = plugin.destroy {
-            unsafe { destroy(self.plugin) };
+            destroy(self.plugin);
         }
 
         // Clean up host
