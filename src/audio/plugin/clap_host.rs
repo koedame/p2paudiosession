@@ -60,8 +60,14 @@ pub struct ClapPlugin {
     pub plugin_data: *mut c_void,
     pub init: Option<extern "C" fn(*const ClapPlugin) -> bool>,
     pub destroy: Option<extern "C" fn(*const ClapPlugin)>,
-    pub activate:
-        Option<extern "C" fn(*const ClapPlugin, sample_rate: f64, min_frames: u32, max_frames: u32) -> bool>,
+    pub activate: Option<
+        extern "C" fn(
+            *const ClapPlugin,
+            sample_rate: f64,
+            min_frames: u32,
+            max_frames: u32,
+        ) -> bool,
+    >,
     pub deactivate: Option<extern "C" fn(*const ClapPlugin)>,
     pub start_processing: Option<extern "C" fn(*const ClapPlugin) -> bool>,
     pub stop_processing: Option<extern "C" fn(*const ClapPlugin)>,
@@ -153,9 +159,9 @@ impl ClapPluginLoader {
 
         // Get the entry point
         let entry: Symbol<*const ClapPluginEntry> = unsafe {
-            library.get(b"clap_entry").map_err(|e| {
-                AudioError::PluginError(format!("Failed to find clap_entry: {}", e))
-            })?
+            library
+                .get(b"clap_entry")
+                .map_err(|e| AudioError::PluginError(format!("Failed to find clap_entry: {}", e)))?
         };
 
         let entry = *entry;
@@ -166,9 +172,8 @@ impl ClapPluginLoader {
         // Initialize the plugin
         let entry_ref = unsafe { &*entry };
         if let Some(init) = entry_ref.init {
-            let path_cstr = CString::new(path).map_err(|_| {
-                AudioError::PluginError("Invalid path string".to_string())
-            })?;
+            let path_cstr = CString::new(path)
+                .map_err(|_| AudioError::PluginError("Invalid path string".to_string()))?;
             if !unsafe { init(path_cstr.as_ptr()) } {
                 return Err(AudioError::PluginError("Plugin init failed".to_string()));
             }
@@ -178,11 +183,15 @@ impl ClapPluginLoader {
         let factory = if let Some(get_factory) = entry_ref.get_factory {
             let factory = unsafe { get_factory(CLAP_PLUGIN_FACTORY_ID.as_ptr() as *const c_char) };
             if factory.is_null() {
-                return Err(AudioError::PluginError("Failed to get plugin factory".to_string()));
+                return Err(AudioError::PluginError(
+                    "Failed to get plugin factory".to_string(),
+                ));
             }
             factory as *const ClapPluginFactory
         } else {
-            return Err(AudioError::PluginError("No get_factory function".to_string()));
+            return Err(AudioError::PluginError(
+                "No get_factory function".to_string(),
+            ));
         };
 
         info!("Loaded CLAP plugin: {}", path);
@@ -237,7 +246,7 @@ impl ClapPluginLoader {
             format: PluginFormat::Clap,
             path: self.path.clone(),
             uid: id,
-            num_inputs: 2,  // Would need to query audio ports extension
+            num_inputs: 2, // Would need to query audio ports extension
             num_outputs: 2,
             has_editor: true, // Would need to query GUI extension
         })
@@ -254,7 +263,9 @@ impl ClapPluginLoader {
 
         let desc_ptr = unsafe { get_desc(self.factory, index) };
         if desc_ptr.is_null() {
-            return Err(AudioError::PluginError("Plugin descriptor is null".to_string()));
+            return Err(AudioError::PluginError(
+                "Plugin descriptor is null".to_string(),
+            ));
         }
 
         let desc = unsafe { &*desc_ptr };
@@ -264,15 +275,17 @@ impl ClapPluginLoader {
         let host_ptr = Box::into_raw(host);
 
         // Create the plugin instance
-        let create = factory.create_plugin.ok_or_else(|| {
-            AudioError::PluginError("No create_plugin function".to_string())
-        })?;
+        let create = factory
+            .create_plugin
+            .ok_or_else(|| AudioError::PluginError("No create_plugin function".to_string()))?;
 
         let plugin_ptr = unsafe { create(self.factory, host_ptr, desc.id) };
         if plugin_ptr.is_null() {
             // Clean up host
             unsafe { drop(Box::from_raw(host_ptr)) };
-            return Err(AudioError::PluginError("Failed to create plugin instance".to_string()));
+            return Err(AudioError::PluginError(
+                "Failed to create plugin instance".to_string(),
+            ));
         }
 
         // Initialize the plugin
@@ -289,9 +302,9 @@ impl ClapPluginLoader {
         }
 
         // Get plugin info
-        let info = self.get_plugin_descriptor(index).ok_or_else(|| {
-            AudioError::PluginError("Failed to get plugin info".to_string())
-        })?;
+        let info = self
+            .get_plugin_descriptor(index)
+            .ok_or_else(|| AudioError::PluginError("Failed to get plugin info".to_string()))?;
 
         info!("Instantiated CLAP plugin: {}", info.name);
 
@@ -342,7 +355,10 @@ fn create_host() -> ClapHost {
 }
 
 // Host callback implementations
-extern "C" fn host_get_extension(_host: *const ClapHost, _extension_id: *const c_char) -> *const c_void {
+extern "C" fn host_get_extension(
+    _host: *const ClapHost,
+    _extension_id: *const c_char,
+) -> *const c_void {
     // Return null for unsupported extensions
     ptr::null()
 }
@@ -390,13 +406,17 @@ impl AudioPlugin for ClapPluginInstance {
         if let Some(activate) = plugin.activate {
             // Activate with default settings
             if !unsafe { activate(self.plugin, 48000.0, 1, 4096) } {
-                return Err(AudioError::PluginError("Plugin activation failed".to_string()));
+                return Err(AudioError::PluginError(
+                    "Plugin activation failed".to_string(),
+                ));
             }
         }
 
         if let Some(start) = plugin.start_processing {
             if !unsafe { start(self.plugin) } {
-                return Err(AudioError::PluginError("Plugin start_processing failed".to_string()));
+                return Err(AudioError::PluginError(
+                    "Plugin start_processing failed".to_string(),
+                ));
             }
             self.processing = true;
         }
@@ -449,15 +469,10 @@ impl AudioPlugin for ClapPluginInstance {
         }
 
         // Prepare input buffers
-        let mut input_ptrs: Vec<*mut f32> = inputs
-            .iter()
-            .map(|ch| ch.as_ptr() as *mut f32)
-            .collect();
+        let mut input_ptrs: Vec<*mut f32> =
+            inputs.iter().map(|ch| ch.as_ptr() as *mut f32).collect();
 
-        let mut output_ptrs: Vec<*mut f32> = outputs
-            .iter_mut()
-            .map(|ch| ch.as_mut_ptr())
-            .collect();
+        let mut output_ptrs: Vec<*mut f32> = outputs.iter_mut().map(|ch| ch.as_mut_ptr()).collect();
 
         let input_buffer = ClapAudioBuffer {
             data32: input_ptrs.as_mut_ptr(),

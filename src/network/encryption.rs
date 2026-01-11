@@ -9,8 +9,8 @@ use std::sync::Arc;
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use hkdf::Hkdf;
-use sha2::Sha256;
 use rand::rngs::OsRng;
+use sha2::Sha256;
 use x25519_dalek::{EphemeralSecret, PublicKey, SharedSecret};
 
 use crate::protocol::Packet;

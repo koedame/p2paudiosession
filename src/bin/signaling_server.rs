@@ -23,9 +23,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tracing::{error, info, warn, Level};
 use uuid::Uuid;
 
-use jamjam::network::{
-    PeerInfo, RoomInfo, SignalingMessage, SignalingServer, MAX_PEERS_PER_ROOM,
-};
+use jamjam::network::{PeerInfo, RoomInfo, SignalingMessage, SignalingServer, MAX_PEERS_PER_ROOM};
 
 /// Signaling server for jamjam P2P audio sessions
 #[derive(Parser, Debug)]
