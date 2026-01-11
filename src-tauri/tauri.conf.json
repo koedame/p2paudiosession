@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.jamjam.app",
   "build": {
-    "beforeDevCommand": "",
+    "beforeDevCommand": "npx serve ../ui/dist -l 1420",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "",
     "frontendDist": "../ui/dist"

@@ -29,12 +29,25 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 git clone https://github.com/koedame/p2paudiosession.git
 cd p2paudiosession
 
-# Build
+# Build core library
 cargo build
 
 # Run tests
 cargo test
 ```
+
+### Running the Desktop App (Tauri)
+
+```bash
+# Development mode (frontend server starts automatically)
+cd src-tauri
+cargo tauri dev
+
+# Production build
+cargo tauri build
+```
+
+The built application will be in `src-tauri/target/release/bundle/`.
 
 ## License
 
