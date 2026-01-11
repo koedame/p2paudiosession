@@ -23,14 +23,15 @@ Network モジュールは以下の責務を持つ:
 
 ```
 network/
-├── connection.rs     # 接続管理
-├── transport.rs      # UDPトランスポート
-├── protocol.rs       # jamjamプロトコル
-├── ice.rs            # ICE/STUN/TURN
-├── dtls.rs           # 暗号化
-├── jitter.rs         # Jitterバッファ
-├── fec.rs            # FEC処理
-└── bandwidth.rs      # 帯域推定
+├── connection.rs       # 接続管理
+├── transport.rs        # UDPトランスポート
+├── session.rs          # セッション管理
+├── signaling.rs        # シグナリング
+├── stun.rs             # STUNクライアント
+├── fec.rs              # FEC処理
+├── jitter_buffer.rs    # Jitterバッファ
+├── sequence_tracker.rs # シーケンス追跡
+└── error.rs            # ネットワークエラー
 ```
 
 ---
@@ -171,46 +172,115 @@ struct PacketStats {
 ### 5.1 設定
 
 ```rust
-struct JitterBufferConfig {
-    /// モード
-    mode: JitterBufferMode,
-    /// 最小サイズ（フレーム数）
-    min_frames: u32,
-    /// 最大サイズ（フレーム数）
-    max_frames: u32,
-    /// 初期サイズ（フレーム数）
-    initial_frames: u32,
-}
-
-enum JitterBufferMode {
-    /// 固定サイズ
-    Fixed,
-    /// 適応的（自動調整）
-    Adaptive,
+/// Jitterバッファ設定
+#[derive(Debug, Clone)]
+pub struct JitterBufferConfig {
+    /// 最小バッファ遅延（フレーム数、デフォルト: 1）
+    pub min_delay_frames: u32,
+    /// 最大バッファ遅延（フレーム数、デフォルト: 10）
+    pub max_delay_frames: u32,
+    /// 初期バッファ遅延（フレーム数、デフォルト: 2）
+    pub initial_delay_frames: u32,
+    /// フレーム長（ミリ秒、デフォルト: 2.5）
+    pub frame_duration_ms: f32,
 }
 ```
 
-### 5.2 操作
+### 5.2 取得結果
 
 ```rust
-/// Jitterバッファ設定を変更
+/// Jitterバッファからの取得結果
+#[derive(Debug)]
+pub enum JitterBufferResult {
+    /// パケットあり
+    Packet {
+        sequence: u32,
+        timestamp: u32,
+        payload: Vec<u8>,
+    },
+    /// パケットロス（時間内に受信できず）
+    Lost { sequence: u32 },
+    /// バッファアンダーラン（パケット不足）
+    Underrun,
+}
+```
+
+### 5.3 JitterBuffer
+
+```rust
+/// 適応型Jitterバッファ
 ///
-/// スレッド: 任意
-/// ブロッキング: No
-fn configure_jitter_buffer(&self, config: JitterBufferConfig);
+/// シーケンス番号でインデックス化されたパケットをバッファリングし、
+/// ネットワーク状況に応じてバッファサイズを自動調整する。
+pub struct JitterBuffer {
+    // ... internal fields ...
+}
 
-/// 現在のJitterバッファ状態を取得
-fn get_jitter_buffer_stats(&self) -> JitterBufferStats;
+impl JitterBuffer {
+    /// デフォルト設定で作成
+    pub fn new() -> Self;
 
-struct JitterBufferStats {
-    /// 現在のサイズ（フレーム数）
-    current_frames: u32,
-    /// 現在のサイズ（ms）
-    current_ms: f32,
-    /// バッファアンダーラン回数
-    underruns: u64,
-    /// バッファオーバーフロー回数
-    overflows: u64,
+    /// カスタム設定で作成
+    pub fn with_config(config: JitterBufferConfig) -> Self;
+
+    /// パケットを挿入
+    ///
+    /// # 引数
+    /// - sequence: パケットシーケンス番号
+    /// - timestamp: タイムスタンプ（サンプル単位）
+    /// - payload: エンコード済み音声データ
+    pub fn insert(&mut self, sequence: u32, timestamp: u32, payload: Vec<u8>);
+
+    /// 次のフレームを取得
+    ///
+    /// シーケンス順でパケットを返す。ロスまたはアンダーランを示す。
+    pub fn pop(&mut self) -> JitterBufferResult;
+
+    /// 次のシーケンス番号を確認（削除せず）
+    pub fn peek(&self) -> Option<u32>;
+
+    /// 現在のバッファ深度（フレーム数）
+    pub fn depth(&self) -> u32;
+
+    /// バッファが空か確認
+    pub fn is_empty(&self) -> bool;
+
+    /// 再生開始済みか確認
+    pub fn is_playing(&self) -> bool;
+
+    /// 統計情報を取得
+    pub fn stats(&self) -> JitterBufferStats;
+
+    /// ネットワーク状況に応じてバッファサイズを適応
+    ///
+    /// 定期的（例: 100msごと）に呼び出すことでバッファサイズを調整する。
+    pub fn adapt(&mut self);
+
+    /// バッファをリセット
+    pub fn reset(&mut self);
+}
+```
+
+### 5.4 統計
+
+```rust
+/// Jitterバッファ統計
+#[derive(Debug, Clone)]
+pub struct JitterBufferStats {
+    /// 挿入されたパケット数
+    pub packets_inserted: u64,
+    /// 再生されたパケット数
+    pub packets_played: u64,
+    /// ロストパケット数
+    pub packets_lost: u64,
+    /// 遅延到着パケット数
+    pub late_arrivals: u64,
+    /// 現在のバッファ深度（フレーム数）
+    pub current_depth: u32,
+    /// 現在の遅延設定（フレーム数）
+    pub current_delay_frames: u32,
+    /// ジッター推定値（ms）
+    pub jitter_estimate_ms: f32,
 }
 ```
 
@@ -257,7 +327,61 @@ struct FecStats {
 
 ---
 
-## 7. 帯域推定 API
+## 7. シーケンストラッカー API
+
+```rust
+/// シーケンス番号追跡によるパケットロス検出
+///
+/// スライディングウィンドウ方式で順序外パケットと
+/// シーケンス番号ラップアラウンドを処理する。
+pub struct SequenceTracker {
+    /// 最後に受信したシーケンス番号
+    last_sequence: Option<u32>,
+    /// 最大シーケンス番号
+    highest_sequence: u32,
+    /// 受信ビットマップ（順序外検出用）
+    received_bitmap: u64,
+    /// 受信パケット総数
+    packets_received: u64,
+    /// ロストパケット総数
+    packets_lost: u64,
+    /// ウィンドウサイズ（デフォルト: 64）
+    window_size: u32,
+}
+
+impl SequenceTracker {
+    /// 新規作成
+    pub fn new() -> Self;
+
+    /// パケット受信を記録
+    ///
+    /// # 戻り値
+    /// ロスと判定されたシーケンス番号リスト
+    pub fn record(&mut self, sequence: u32) -> Vec<u32>;
+
+    /// パケットロス率を取得（0.0〜1.0）
+    pub fn loss_rate(&self) -> f32;
+
+    /// 受信パケット数を取得
+    pub fn packets_received(&self) -> u64;
+
+    /// ロストパケット数を取得
+    pub fn packets_lost(&self) -> u64;
+
+    /// 最大シーケンス番号を取得
+    pub fn highest_sequence(&self) -> u32;
+
+    /// 特定のシーケンス番号が受信済みか確認
+    pub fn was_received(&self, sequence: u32) -> bool;
+
+    /// 統計をリセット
+    pub fn reset(&mut self);
+}
+```
+
+---
+
+## 8. 帯域推定 API
 
 ```rust
 /// 帯域推定設定
@@ -297,7 +421,7 @@ struct BandwidthStats {
 
 ---
 
-## 8. 接続統計 API
+## 9. 接続統計 API
 
 ```rust
 /// 接続統計を取得
@@ -325,7 +449,7 @@ struct ConnectionStats {
 
 ---
 
-## 9. イベント
+## 10. イベント
 
 ```rust
 enum NetworkEvent {
@@ -358,7 +482,7 @@ where
 
 ---
 
-## 10. エラー
+## 11. エラー
 
 ```rust
 enum NetworkError {
@@ -392,7 +516,7 @@ enum ConnectionError {
 
 ---
 
-## 11. スレッドモデル
+## 12. スレッドモデル
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -416,7 +540,7 @@ enum ConnectionError {
 
 ---
 
-## 12. 使用例
+## 13. 使用例
 
 ```rust
 // 接続設定
@@ -433,10 +557,10 @@ let connection = connect(remote_session, config).await?;
 
 // Jitterバッファ設定
 connection.configure_jitter_buffer(JitterBufferConfig {
-    mode: JitterBufferMode::Adaptive,
-    min_frames: 1,
-    max_frames: 10,
-    initial_frames: 4,
+    min_delay_frames: 1,
+    max_delay_frames: 10,
+    initial_delay_frames: 4,
+    frame_duration_ms: 2.5,
 });
 
 // FEC設定
