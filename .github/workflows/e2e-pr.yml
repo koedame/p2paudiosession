@@ -168,3 +168,70 @@ jobs:
           cargo test --features full -- --test-threads=1
         env:
           RUST_LOG: info
+
+  e2e-self-hosted-linux:
+    name: E2E Self-Hosted Linux
+    runs-on: [self-hosted, Linux, e2e]
+    timeout-minutes: 30
+    # Only run on push to main (not on every PR to save runner resources)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check environment
+        run: |
+          echo "=== System Info ==="
+          uname -a
+          echo "=== Rust Version ==="
+          rustc --version
+          cargo --version
+          echo "=== PipeWire Status ==="
+          systemctl --user status pipewire || echo "PipeWire status check completed"
+          echo "=== Audio Devices ==="
+          pactl list short sinks || echo "No sinks available"
+          pactl list short sources || echo "No sources available"
+
+      - name: Setup virtual audio devices
+        run: |
+          # Ensure virtual audio sink exists
+          if ! pactl list short sinks | grep -q "jamjam-test"; then
+            pactl load-module module-null-sink sink_name=jamjam-test-sink sink_properties=device.description="jamjam-test-sink" || true
+          fi
+          echo "Virtual audio devices ready"
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Generate audio fixtures
+        working-directory: tests/e2e
+        run: cargo run --bin generate_fixtures
+
+      - name: Run E2E loopback tests
+        working-directory: tests/e2e
+        run: |
+          cargo test --features loopback -- --test-threads=1 --nocapture
+        env:
+          RUST_LOG: info
+          RUST_BACKTRACE: 1
+
+      - name: Run E2E network local tests
+        working-directory: tests/e2e
+        run: |
+          cargo test --features network-local -- --test-threads=1 --nocapture
+        env:
+          RUST_LOG: info
+          RUST_BACKTRACE: 1
+
+      - name: Run full E2E integration tests
+        working-directory: tests/e2e
+        run: |
+          cargo test --features full -- --test-threads=1 --nocapture
+        env:
+          RUST_LOG: info
+          RUST_BACKTRACE: 1
+
+      - name: Cleanup virtual audio
+        if: always()
+        run: |
+          # Cleanup is handled by systemd service, but ensure no leftover modules
+          echo "Cleanup completed"
