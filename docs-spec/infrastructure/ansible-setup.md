@@ -81,10 +81,26 @@ jamjam サービス（signaling-server, echo-server, cloudflared）をデプロ�
 
 **タスク:**
 - アプリケーションディレクトリ作成（/opt/jamjam）
-- Docker イメージビルド or プル
 - docker-compose.yml 配置
-- .env ファイル生成
+- .env ファイル生成（mode: 0644）
+- cloudflared イメージプル
 - サービス起動
+
+**Docker イメージのデプロイ方式:**
+
+テスト環境では、メモリ制約（1GB）のある VPS でのビルドを避けるため、ローカルでビルドして直接転送する：
+
+```bash
+# ローカルでビルド
+docker build -f Dockerfile.signaling -t jamjam-signaling:latest .
+docker build -f Dockerfile.echo -t jamjam-echo:latest .
+
+# VPS に直接転送
+docker save jamjam-signaling:latest | ssh user@vps docker load
+docker save jamjam-echo:latest | ssh user@vps docker load
+```
+
+本番環境では ghcr.io からプルする方式も検討可能。
 
 **変数:**
 | 変数名 | デフォルト | 説明 |
@@ -196,7 +212,97 @@ ansible-playbook -i inventory/test.yml playbooks/site.yml --vault-password-file 
 
 ## 実行手順
 
-### 初回セットアップ
+### テスト環境デプロイ（完全手順）
+
+#### 1. 設定ファイルの準備
+
+```bash
+cd ansible
+
+# inventory ファイルをコピー
+cp inventory/test.yml.example inventory/test.yml
+
+# group_vars ファイルをコピー
+cp group_vars/test.yml.example group_vars/test.yml
+```
+
+#### 2. 設定ファイルの編集
+
+**inventory/test.yml:**
+```yaml
+# ansible_host: VPS の IP アドレスを設定（PrivateDocs/secrets.md 参照）
+ansible_host: <YOUR_VPS_IP>
+```
+
+**group_vars/test.yml:**
+```yaml
+# sudo パスワード
+ansible_become_pass: "YOUR_SUDO_PASSWORD"
+
+# Echo Server の公開アドレス
+jamjam_echo_public_addr: "YOUR_SERVER_IP:5000"
+
+# Cloudflare Tunnel トークン（Cloudflare ダッシュボードから取得）
+jamjam_cloudflare_tunnel_token: "YOUR_TUNNEL_TOKEN"
+```
+
+#### 3. Docker イメージのビルドと転送
+
+テスト VPS はメモリ 1GB のため、ローカルでビルドして転送する：
+
+```bash
+cd /path/to/p2paudiosession
+
+# signaling-server イメージをビルド
+docker build -f Dockerfile.signaling -t jamjam-signaling:latest .
+
+# echo-server イメージをビルド
+docker build -f Dockerfile.echo -t jamjam-echo:latest .
+
+# VPS に転送（SSH 鍵のパスは環境に合わせて変更）
+docker save jamjam-signaling:latest | ssh -i PrivateDocs/jamjam_vps ubuntu@<YOUR_VPS_IP> 'docker load'
+docker save jamjam-echo:latest | ssh -i PrivateDocs/jamjam_vps ubuntu@<YOUR_VPS_IP> 'docker load'
+```
+
+#### 4. Ansible Playbook の実行
+
+```bash
+cd ansible
+ansible-playbook -i inventory/test.yml playbooks/site.yml
+```
+
+#### 5. デプロイ確認
+
+```bash
+# SSH でサービス状態を確認
+ssh -i PrivateDocs/jamjam_vps ubuntu@<YOUR_VPS_IP> 'cd /opt/jamjam && docker compose ps'
+
+# 期待される出力:
+# jamjam-signaling   ... healthy
+# jamjam-echo        ... healthy
+# jamjam-cloudflared ... running
+```
+
+### イメージ更新時の再デプロイ
+
+コード変更後の再デプロイ手順：
+
+```bash
+# 1. イメージを再ビルド
+docker build -f Dockerfile.signaling -t jamjam-signaling:latest .
+docker build -f Dockerfile.echo -t jamjam-echo:latest .
+
+# 2. VPS に転送
+docker save jamjam-signaling:latest | ssh -i PrivateDocs/jamjam_vps ubuntu@<YOUR_VPS_IP> 'docker load'
+docker save jamjam-echo:latest | ssh -i PrivateDocs/jamjam_vps ubuntu@<YOUR_VPS_IP> 'docker load'
+
+# 3. サービス再起動
+ssh -i PrivateDocs/jamjam_vps ubuntu@<YOUR_VPS_IP> 'cd /opt/jamjam && docker compose up -d'
+```
+
+### 本番環境デプロイ（Vault 使用）
+
+本番環境では Ansible Vault で機密情報を暗号化する：
 
 ```bash
 # 1. Vault パスワードファイル作成
@@ -206,56 +312,44 @@ chmod 600 PrivateDocs/ansible-vault-password
 # 2. secrets.yml 作成・暗号化
 ansible-vault create ansible/vault/secrets.yml --vault-password-file PrivateDocs/ansible-vault-password
 
-# 3. テスト環境にデプロイ
-ansible-playbook -i ansible/inventory/test.yml ansible/playbooks/site.yml \
-  --vault-password-file PrivateDocs/ansible-vault-password
-
-# 4. 本番環境にデプロイ
+# 3. 本番環境にデプロイ
 ansible-playbook -i ansible/inventory/production.yml ansible/playbooks/site.yml \
-  --vault-password-file PrivateDocs/ansible-vault-password
-```
-
-### デプロイのみ
-
-```bash
-ansible-playbook -i ansible/inventory/test.yml ansible/playbooks/deploy.yml \
-  --vault-password-file PrivateDocs/ansible-vault-password
-```
-
-### ロールバック
-
-```bash
-ansible-playbook -i ansible/inventory/test.yml ansible/playbooks/rollback.yml \
   --vault-password-file PrivateDocs/ansible-vault-password
 ```
 
 ## inventory ファイル形式
 
+inventory ファイルでは `children` 構造を使用する。これにより `group_vars/<group_name>.yml` が自動的に読み込まれる。
+
 ### inventory/test.yml
 
 ```yaml
 all:
-  hosts:
-    test-vps:
-      ansible_host: <TEST_VPS_IP>
-      ansible_user: root
-      ansible_ssh_private_key_file: PrivateDocs/jamjam_vps
-  vars:
-    cloudflare_tunnel_token: "{{ vault_cloudflare_tunnel_token_test }}"
+  children:
+    test:
+      hosts:
+        test-jamjam:
+          ansible_host: <TEST_VPS_IP>
+          ansible_user: ubuntu
+          ansible_ssh_private_key_file: "{{ inventory_dir }}/../../PrivateDocs/jamjam_vps"
+          # ansible_become_pass is defined in group_vars/test.yml
 ```
 
 ### inventory/production.yml
 
 ```yaml
 all:
-  hosts:
-    prod-vps:
-      ansible_host: <PROD_VPS_IP>
-      ansible_user: root
-      ansible_ssh_private_key_file: PrivateDocs/jamjam_vps
-  vars:
-    cloudflare_tunnel_token: "{{ vault_cloudflare_tunnel_token_production }}"
+  children:
+    production:
+      hosts:
+        prod-jamjam:
+          ansible_host: <PROD_VPS_IP>
+          ansible_user: ubuntu
+          ansible_ssh_private_key_file: "{{ inventory_dir }}/../../PrivateDocs/jamjam_vps"
+          # ansible_become_pass is defined in group_vars/production.yml
 ```
+
+**重要**: `children: <group_name>:` 構造を使用しないと、対応する `group_vars/<group_name>.yml` が読み込まれない。
 
 ## 依存関係
 
@@ -265,7 +359,42 @@ all:
 
 ## セキュリティ考慮事項
 
+### 機密情報の管理
+
+機密情報を含むファイルは `.gitignore` で除外し、`.example` ファイルをテンプレートとして提供する：
+
+```
+# .gitignore
+ansible/inventory/test.yml
+ansible/inventory/production.yml
+ansible/group_vars/test.yml
+ansible/group_vars/production.yml
+```
+
+| ファイル | 内容 | Git 管理 |
+|---------|------|---------|
+| `inventory/test.yml` | サーバー IP | ❌ 除外 |
+| `inventory/test.yml.example` | テンプレート | ✅ 管理 |
+| `group_vars/test.yml` | パスワード、トークン | ❌ 除外 |
+| `group_vars/test.yml.example` | テンプレート | ✅ 管理 |
+
+### group_vars に含める機密情報
+
+```yaml
+# group_vars/test.yml
+ansible_become_pass: "YOUR_SUDO_PASSWORD"
+jamjam_cloudflare_tunnel_token: "YOUR_TUNNEL_TOKEN"
+```
+
+### Ansible Vault（オプション）
+
+より厳格なセキュリティが必要な場合は Ansible Vault を使用：
+
 - Vault パスワードファイルは Git 管理対象外
+- 詳細は「Ansible Vault」セクションを参照
+
+### その他
+
 - SSH 鍵は PrivateDocs に保管
-- 本番環境への直接 root ログインは初回のみ、以降は jamjam ユーザーを使用
+- ubuntu ユーザーで接続し、sudo で権限昇格
 - Cloudflare Tunnel により、signaling-server は直接インターネットに公開しない

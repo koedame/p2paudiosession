@@ -1,9 +1,11 @@
+# Test environment inventory
+# Copy this file to test.yml and fill in your values
 all:
-  hosts:
-    test-jamjam:
-      ansible_host: YOUR_SERVER_IP
-      ansible_user: ubuntu
-      ansible_ssh_private_key_file: "{{ inventory_dir }}/../../PrivateDocs/jamjam_vps"
-      ansible_become_pass: "YOUR_SUDO_PASSWORD"
-  vars:
-    environment_name: test
+  children:
+    test:
+      hosts:
+        test-jamjam:
+          ansible_host: YOUR_SERVER_IP
+          ansible_user: ubuntu
+          ansible_ssh_private_key_file: "{{ inventory_dir }}/../../PrivateDocs/jamjam_vps"
+          # ansible_become_pass is defined in group_vars/test.yml
