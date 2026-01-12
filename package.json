@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "scripts": {
+    "tauri:dev": "cd ui && npm install && npm run dev",
+    "tauri:build": "cd ui && npm install && npm run build"
+  }
+}

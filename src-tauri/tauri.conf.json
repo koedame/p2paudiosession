@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.jamjam.app",
   "build": {
-    "beforeDevCommand": "if [ -d ui ]; then cd ui; else cd ../ui; fi && npm install && npm run dev",
+    "beforeDevCommand": "npm run tauri:dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "if [ -d ui ]; then cd ui; else cd ../ui; fi && npm install && npm run build",
+    "beforeBuildCommand": "npm run tauri:build",
     "frontendDist": "../ui/dist"
   },
   "app": {
