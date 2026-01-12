@@ -83,7 +83,6 @@ jobs:
 
       - name: Build Tauri app
         run: cargo tauri build
-        working-directory: src-tauri
 
       - name: Upload artifacts (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
