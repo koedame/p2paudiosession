@@ -249,7 +249,6 @@ impl Session {
         self.inner_recv_handle = Some(inner_handle);
 
         let handle = tokio::spawn(async move {
-
             while let Some((packet, addr)) = rx.recv().await {
                 if !running.load(Ordering::SeqCst) {
                     break;
