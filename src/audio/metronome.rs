@@ -177,7 +177,7 @@ impl Metronome {
             sample_pos += 1;
 
             // Check for beat transition
-            if sample_pos.is_multiple_of(self.samples_per_beat as u64) {
+            if sample_pos % self.samples_per_beat as u64 == 0 {
                 current_beat += 1;
                 if current_beat >= self.config.beats_per_measure {
                     current_beat = 0;
