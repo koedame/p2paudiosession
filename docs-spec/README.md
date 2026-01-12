@@ -17,6 +17,7 @@ sidebar_position: 1
 | ファイル | 説明 |
 |---------|------|
 | [architecture.md](./architecture.md) | 技術構成（最重要） |
+| [ui-ux-guideline.md](./ui-ux-guideline.md) | UI/UXガイドライン |
 | [adr/](./adr/ADR-001-language-rust.md) | 設計判断記録（ADR） |
 | [api/](./api/audio_engine.md) | API境界定義 |
 | behavior/ | 振る舞い定義（BDD/Gherkin） |
@@ -34,6 +35,7 @@ sidebar_position: 1
 | [ADR-005](./adr/ADR-005-no-audio-processing.md) | 音声処理を行わない方針 |
 | [ADR-006](./adr/ADR-006-fec-strategy.md) | FEC（前方誤り訂正）採用 |
 | [ADR-007](./adr/ADR-007-i18n-library.md) | i18nライブラリ選定 |
+| [ADR-008](./adr/ADR-008-zero-latency-mode.md) | ゼロレイテンシーモード |
 
 ---
 

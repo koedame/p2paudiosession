@@ -4,6 +4,11 @@ title: ジッタバッファ
 description: ネットワークジッターを吸収して安定した音声再生を実現する仕組み
 ---
 
+:::note
+このドキュメントは開発者向けの解説資料です。
+正確な仕様・制約・判断は [docs-spec/](https://github.com/koedame/p2paudiosession/tree/main/docs-spec) を参照してください。
+:::
+
 # ジッタバッファ（Jitter Buffer）
 
 ジッタバッファは、ネットワークの「揺らぎ」を吸収して安定した音声再生を実現するための仕組みです。
