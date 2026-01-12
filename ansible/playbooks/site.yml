@@ -19,7 +19,7 @@
           Server: {{ inventory_hostname }}
 
           Services:
-            - signaling-server: port {{ jamjam_signaling_port }}
-            - echo-server: port {{ jamjam_echo_port }}/udp
+            - signaling-server: port 8080
+            - echo-server: port 5000/udp
 
           Check status: ssh {{ ansible_user }}@{{ ansible_host }} 'cd {{ jamjam_app_dir }} && docker compose ps'

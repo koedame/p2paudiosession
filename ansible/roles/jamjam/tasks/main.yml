@@ -19,11 +19,11 @@
   template:
     src: env.j2
     dest: "{{ jamjam_app_dir }}/.env"
-    mode: '0600'
+    mode: '0644'
   notify: Restart jamjam services
 
-- name: Pull Docker images
-  command: docker compose pull
+- name: Pull cloudflared image
+  command: docker pull cloudflare/cloudflared:latest
   args:
     chdir: "{{ jamjam_app_dir }}"
   register: pull_result

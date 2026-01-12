@@ -6,9 +6,7 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: jamjam-cloudflared
-    command: tunnel run
-    environment:
-      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     restart: unless-stopped
     networks:
       - jamjam-network
@@ -18,7 +16,7 @@ services:
 
   # Signaling server - WebSocket for room management and ICE exchange
   signaling-server:
-    image: ghcr.io/koedame/p2paudiosession/signaling-server:{{ jamjam_image_tag }}
+    image: jamjam-signaling:{{ jamjam_image_tag }}
     container_name: jamjam-signaling
     ports:
       - "127.0.0.1:8080:8080"
@@ -33,7 +31,7 @@ services:
         max-size: "{{ docker_log_max_size }}"
         max-file: "{{ docker_log_max_file }}"
     healthcheck:
-      test: ["CMD", "pgrep", "signaling-server"]
+      test: ["CMD", "pgrep", "-f", "signaling"]
       interval: 30s
       timeout: 3s
       start_period: 5s
@@ -41,7 +39,7 @@ services:
 
   # Echo server - returns audio with configurable delay
   echo-server:
-    image: ghcr.io/koedame/p2paudiosession/echo-server:{{ jamjam_image_tag }}
+    image: jamjam-echo:{{ jamjam_image_tag }}
     container_name: jamjam-echo
     ports:
       - "5000:5000/udp"
@@ -50,7 +48,7 @@ services:
       - ECHO_DELAY_MS=${ECHO_DELAY_MS:-3000}
       - SIGNALING_URL=ws://signaling-server:8080
       - PUBLIC_ADDR=${ECHO_PUBLIC_ADDR:-}
-    command: ["echo-server", "--port", "5000", "--signaling-url", "ws://signaling-server:8080"]
+    command: ["--port", "5000", "--signaling-url", "ws://signaling-server:8080"]
     restart: unless-stopped
     networks:
       - jamjam-network
@@ -63,7 +61,7 @@ services:
         max-size: "{{ docker_log_max_size }}"
         max-file: "{{ docker_log_max_file }}"
     healthcheck:
-      test: ["CMD", "pgrep", "echo-server"]
+      test: ["CMD", "pgrep", "-f", "echo"]
       interval: 30s
       timeout: 3s
       start_period: 5s
