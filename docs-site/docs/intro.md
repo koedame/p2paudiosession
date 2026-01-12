@@ -19,10 +19,10 @@ jamjamは、ミュージシャンがインターネット越しにリアルタ�
 
 ## 主な特徴
 
-- **超低レイテンシ**: アプリケーション起因で10ms以下を目標
+- **超低レイテンシ**: アプリケーション起因で2ms以下を目標（zero-latencyモード）
 - **P2P通信**: 中央サーバーを介さない直接通信
 - **クロスプラットフォーム**: Windows / macOS / Linux 対応
-- **高音質**: 最大96kHz/24bit対応
+- **高音質**: 最大96kHz/32bit float対応、非圧縮PCMがデフォルト
 
 ## 対象ユースケース
 
@@ -54,3 +54,4 @@ jamjamは、ミュージシャンがインターネット越しにリアルタ�
 
 - [インストール](/docs/getting-started/installation) - jamjamをインストールする
 - [クイックスタート](/docs/getting-started/quick-start) - 最初のセッションを始める
+- [ジッタバッファ](/docs/concepts/jitter-buffer) - 低遅延を実現する技術を理解する

@@ -178,10 +178,23 @@ struct PacketStats {
 ### 5.1 設定
 
 ```rust
+/// Jitterバッファ動作モード
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JitterBufferMode {
+    /// 適応的（デフォルト）- ネットワーク状況に応じて自動調整
+    Adaptive,
+    /// 固定 - 指定したフレーム数で固定
+    Fixed,
+    /// パススルー - バッファリングなし、受信即再生（zero-latencyモード用）
+    Passthrough,
+}
+
 /// Jitterバッファ設定
 #[derive(Debug, Clone)]
 pub struct JitterBufferConfig {
-    /// 最小バッファ遅延（フレーム数、デフォルト: 1、必ず1以上）
+    /// 動作モード（デフォルト: Adaptive）
+    pub mode: JitterBufferMode,
+    /// 最小バッファ遅延（フレーム数、デフォルト: 1、Passthrough時は0）
     pub min_delay_frames: u32,
     /// 最大バッファ遅延（フレーム数、デフォルト: 10）
     pub max_delay_frames: u32,
@@ -192,16 +205,36 @@ pub struct JitterBufferConfig {
 }
 
 impl JitterBufferConfig {
+    /// zero-latencyモード用のパススルー設定を作成
+    pub fn passthrough() -> Self {
+        Self {
+            mode: JitterBufferMode::Passthrough,
+            min_delay_frames: 0,
+            max_delay_frames: 0,
+            initial_delay_frames: 0,
+            frame_duration_ms: 0.67, // 32 samples @ 48kHz
+        }
+    }
+
     /// 設定を検証・正規化
     ///
     /// 以下の正規化が行われる:
-    /// - min_delay_frames が 0 の場合は 1 に補正
+    /// - Passthroughモード時は min/max/initial を 0 に設定
+    /// - Adaptive/Fixedモードで min_delay_frames が 0 の場合は 1 に補正
     /// - max_delay_frames が min_delay_frames 未満の場合は min に補正
     /// - initial_delay_frames が範囲外の場合はクランプ
     /// - frame_duration_ms が 0 以下の場合はデフォルト値に補正
     pub fn validated(self) -> Self;
 }
 ```
+
+**パススルーモード（Passthrough）について:**
+
+- `zero-latency`プリセット専用のモード
+- Jitterバッファによる遅延を完全に排除（0ms）
+- 受信したパケットを即座に再生キューに渡す
+- ネットワークジッターは音声の乱れとして直接現れる
+- 安定した有線LAN環境でのみ推奨
 
 **注意**: `JitterBuffer::with_config()` は内部で `validated()` を呼び出すため、
 不正な設定値は自動的に正規化される。
@@ -469,7 +502,103 @@ struct ConnectionStats {
 
 ---
 
-## 10. イベント
+## 10. 推奨設定 API
+
+ジッター値に基づいて最適なプリセットを推奨する。
+
+```rust
+/// 推奨設定を取得
+fn get_recommended_settings(&self, participant_id: ParticipantId) -> RecommendedSettings;
+
+/// 推奨設定
+#[derive(Debug, Clone)]
+pub struct RecommendedSettings {
+    /// 推奨プリセット名
+    pub recommended_preset: PresetName,
+    /// 現在のプリセット名
+    pub current_preset: PresetName,
+    /// 推奨理由
+    pub reason: RecommendationReason,
+    /// 接続品質レベル
+    pub quality_level: QualityLevel,
+    /// 推奨メッセージ（UI表示用）
+    pub message: String,
+}
+
+/// 推奨理由
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecommendationReason {
+    /// ジッターが非常に小さい（< 1ms）
+    VeryLowJitter,
+    /// ジッターが小さい（1-3ms）
+    LowJitter,
+    /// ジッターがやや大きい（3-10ms）
+    ModerateJitter,
+    /// ジッターが大きい（> 10ms）
+    HighJitter,
+    /// パケットロスが多い
+    HighPacketLoss,
+}
+
+/// 接続品質レベル
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QualityLevel {
+    /// 非常に良好 - zero-latency推奨
+    Excellent,
+    /// 良好 - ultra-low-latency推奨
+    Good,
+    /// 普通 - balanced推奨
+    Fair,
+    /// 悪い - high-quality推奨（バッファ増加）
+    Poor,
+}
+
+/// プリセット名
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PresetName {
+    ZeroLatency,
+    UltraLowLatency,
+    Balanced,
+    HighQuality,
+    Custom(String),
+}
+```
+
+### 推奨ロジック
+
+| ジッター | パケットロス | 品質レベル | 推奨プリセット |
+|---------|------------|-----------|--------------|
+| < 1ms | < 0.1% | Excellent | zero-latency |
+| 1-3ms | < 0.5% | Good | ultra-low-latency |
+| 3-10ms | < 1% | Fair | balanced |
+| > 10ms | any | Poor | high-quality |
+| any | > 1% | Poor | high-quality |
+
+### 使用例
+
+```rust
+// 参加者ごとの推奨設定を取得
+let recommendation = connection.get_recommended_settings(alice_id);
+
+match recommendation.quality_level {
+    QualityLevel::Excellent => {
+        // zero-latencyへの切り替えを提案
+        ui.show_suggestion(&recommendation.message);
+    }
+    QualityLevel::Poor => {
+        // バッファ増加を警告
+        ui.show_warning(&recommendation.message);
+    }
+    _ => {}
+}
+
+// メッセージ例: "非常に安定。zero-latencyモード推奨"
+// メッセージ例: "不安定。バッファを増やしてください"
+```
+
+---
+
+## 11. イベント
 
 ```rust
 enum NetworkEvent {
@@ -502,7 +631,7 @@ where
 
 ---
 
-## 11. エラー
+## 12. エラー
 
 ```rust
 enum NetworkError {
@@ -540,7 +669,7 @@ enum ConnectionError {
 
 ---
 
-## 12. スレッドモデル
+## 13. スレッドモデル
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -564,7 +693,7 @@ enum ConnectionError {
 
 ---
 
-## 13. 使用例
+## 14. 使用例
 
 ```rust
 // 接続設定
@@ -579,13 +708,17 @@ let config = ConnectionConfig {
 // 接続
 let connection = connect(remote_session, config).await?;
 
-// Jitterバッファ設定
+// Jitterバッファ設定（balanced モード）
 connection.configure_jitter_buffer(JitterBufferConfig {
+    mode: JitterBufferMode::Adaptive,
     min_delay_frames: 1,
     max_delay_frames: 10,
     initial_delay_frames: 4,
-    frame_duration_ms: 2.5,
+    frame_duration_ms: 2.67, // 128 samples @ 48kHz
 });
+
+// または zero-latency モード用のパススルー設定
+// connection.configure_jitter_buffer(JitterBufferConfig::passthrough());
 
 // FEC設定
 connection.configure_fec(FecConfig {
