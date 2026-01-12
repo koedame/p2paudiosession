@@ -368,6 +368,43 @@ Update audio_engine.md with NoiseGate API documentation
 
 ---
 
+## CI/ローカル環境の整合性ルール
+
+### 基本原則
+
+**CIで動作するコマンドは、ローカル環境（macOS/Windows/Linux）でも同じ手順で動作しなければならない。**
+
+### CI設定変更時の必須チェック
+
+CI（`.github/workflows/*.yml`）を変更する際は、以下を確認する：
+
+1. **ローカル再現性**: CIで実行するコマンドがローカルでも同じ結果になるか
+2. **クロスプラットフォーム**: macOS, Windows, Linux全てで動作するか
+3. **シェル構文**: Bash固有の構文（`if [ -d ... ]`等）はWindowsで動作しない
+
+### Tauriプロジェクト固有のルール
+
+| 項目 | ルール |
+|-----|-------|
+| 実行場所 | `cargo tauri dev/build`は**プロジェクトルート**から実行 |
+| npm scripts | シェル固有構文を避け、`package.json`のnpm scriptsを使用 |
+| beforeDevCommand | `npm run tauri:dev`（package.jsonで定義） |
+| beforeBuildCommand | `npm run tauri:build`（package.jsonで定義） |
+
+### 禁止事項
+
+- CIの`working-directory`でのみ動作するコマンド設定
+- Bash固有構文（`[ -d ]`, `[[ ]]`, `&&`のネスト等）をtauri.conf.jsonに直接記述
+- CIで成功してもローカルでテストせずにマージ
+
+### 問題発生時の対応フロー
+
+1. CIとローカルで動作が異なる場合、**ローカル動作を優先**して修正
+2. クロスプラットフォーム対応にはnpm scriptsまたはNode.jsスクリプトを使用
+3. 解決策はADRに記録する
+
+---
+
 ## Git コミットルール
 
 ### 言語
