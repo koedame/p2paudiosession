@@ -1,0 +1,37 @@
+---
+# Common server setup tasks
+
+- name: Set timezone to Asia/Tokyo
+  timezone:
+    name: Asia/Tokyo
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install common packages
+  apt:
+    name:
+      - curl
+      - git
+      - htop
+      - vim
+      - wget
+      - ca-certificates
+      - gnupg
+      - lsb-release
+    state: present
+
+- name: Ensure locale is generated
+  locale_gen:
+    name: en_US.UTF-8
+    state: present
+
+- name: Set default locale
+  copy:
+    content: |
+      LANG=en_US.UTF-8
+      LC_ALL=en_US.UTF-8
+    dest: /etc/default/locale
+    mode: '0644'

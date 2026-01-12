@@ -1,0 +1,25 @@
+---
+# Main playbook for jamjam server setup
+- name: Setup jamjam server
+  hosts: all
+  become: yes
+
+  roles:
+    - common
+    - docker
+    - jamjam
+
+  post_tasks:
+    - name: Show deployment summary
+      debug:
+        msg: |
+          Deployment complete!
+
+          Environment: {{ environment_name }}
+          Server: {{ inventory_hostname }}
+
+          Services:
+            - signaling-server: port {{ jamjam_signaling_port }}
+            - echo-server: port {{ jamjam_echo_port }}/udp
+
+          Check status: ssh {{ ansible_user }}@{{ ansible_host }} 'cd {{ jamjam_app_dir }} && docker compose ps'

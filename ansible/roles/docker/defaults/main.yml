@@ -1,0 +1,4 @@
+---
+# Default values for docker role
+docker_log_max_size: "100m"
+docker_log_max_file: "5"

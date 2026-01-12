@@ -1,0 +1,19 @@
+# Test environment specific variables
+---
+environment_name: test
+
+# sudo password (same as root)
+ansible_become_pass: "YOUR_SUDO_PASSWORD"
+
+# Logging
+jamjam_rust_log: debug
+
+# Echo Server
+jamjam_echo_delay_ms: 1000
+jamjam_echo_public_addr: "YOUR_SERVER_IP:5000"
+
+# Cloudflare Tunnel
+jamjam_cloudflare_tunnel_token: "YOUR_CLOUDFLARE_TUNNEL_TOKEN"
+
+# R2 log upload (disabled for test)
+r2_log_upload_enabled: false

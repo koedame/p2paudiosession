@@ -1,0 +1,11 @@
+---
+# Default values for jamjam role
+jamjam_app_dir: /opt/jamjam
+jamjam_user: jamjam
+jamjam_group: jamjam
+jamjam_image_tag: latest
+jamjam_rust_log: info
+jamjam_echo_delay_ms: 3000
+jamjam_echo_public_addr: "{{ ansible_facts['default_ipv4']['address'] }}:5000"
+jamjam_cloudflare_tunnel_token: ""
+r2_log_upload_enabled: false

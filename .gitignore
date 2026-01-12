@@ -43,3 +43,9 @@ docs-site/build/
 
 # Private documentation (secrets, tokens, internal server info)
 PrivateDocs/
+
+# Ansible secrets (use .example files as templates)
+ansible/inventory/test.yml
+ansible/inventory/production.yml
+ansible/group_vars/test.yml
+ansible/group_vars/production.yml

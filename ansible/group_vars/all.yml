@@ -1,0 +1,24 @@
+# Common variables for all environments
+---
+# Application settings
+jamjam_app_dir: /opt/jamjam
+jamjam_user: jamjam
+jamjam_group: jamjam
+
+# Docker settings
+docker_log_max_size: "100m"
+docker_log_max_file: "5"
+
+# Network ports
+jamjam_signaling_port: 8080
+jamjam_echo_port: 5000
+
+# Health check settings
+healthcheck_interval: "30s"
+healthcheck_timeout: "3s"
+healthcheck_retries: 3
+healthcheck_start_period: "5s"
+
+# Git repository
+jamjam_repo_url: "https://github.com/koedame/p2paudiosession.git"
+jamjam_repo_branch: main

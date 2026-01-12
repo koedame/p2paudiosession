@@ -1,0 +1,5 @@
+---
+- name: Restart jamjam services
+  command: docker compose restart
+  args:
+    chdir: "{{ jamjam_app_dir }}"

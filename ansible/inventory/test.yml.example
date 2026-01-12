@@ -1,0 +1,9 @@
+all:
+  hosts:
+    test-jamjam:
+      ansible_host: YOUR_SERVER_IP
+      ansible_user: ubuntu
+      ansible_ssh_private_key_file: "{{ inventory_dir }}/../../PrivateDocs/jamjam_vps"
+      ansible_become_pass: "YOUR_SUDO_PASSWORD"
+  vars:
+    environment_name: test
