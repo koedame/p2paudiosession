@@ -52,6 +52,7 @@ impl VirtualAudioManager {
     }
 
     /// Get the script path for the current platform
+    #[allow(dead_code)]
     fn get_script_path(&self) -> PathBuf {
         let script_name = self.platform.virtual_audio_script();
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))

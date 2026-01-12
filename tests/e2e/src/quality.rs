@@ -48,6 +48,8 @@ impl QualityResult {
 /// Uses ITU-T P.862 PESQ algorithm to compare reference and degraded audio.
 pub struct PesqEvaluator {
     /// Sample rate (must be 8000 or 16000 for narrowband PESQ, 48000 for wideband)
+    /// Reserved for future PESQ library integration
+    #[allow(dead_code)]
     sample_rate: u32,
 }
 
