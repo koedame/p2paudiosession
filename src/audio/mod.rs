@@ -20,7 +20,10 @@ pub use effects::{
     db_to_linear, linear_to_db, Compressor, Delay, Effect, EffectChain, Gain, HighPassFilter,
     LowPassFilter, NoiseGate,
 };
-pub use engine::{AudioBuffer, AudioConfig, AudioEngine, BitDepth, CaptureConfig, PlaybackConfig};
+pub use engine::{
+    AudioBuffer, AudioConfig, AudioEngine, BitDepth, CaptureConfig, PlaybackConfig,
+    SharedPlaybackProducer,
+};
 pub use error::AudioError;
 pub use metronome::{Metronome, MetronomeConfig, MetronomeState, MetronomeSync};
 pub use plc::PcmPlc;

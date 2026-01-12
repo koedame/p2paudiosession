@@ -153,16 +153,17 @@ impl AudioBuffer {
 #[allow(dead_code)]
 pub type CaptureCallback = Box<dyn Fn(&[f32], u64) + Send + 'static>;
 
+/// Thread-safe playback producer wrapper
+pub type SharedPlaybackProducer = Arc<std::sync::Mutex<ringbuf::HeapProd<f32>>>;
+
 /// Audio engine handles capture and playback
 pub struct AudioEngine {
     config: AudioConfig,
     capture_stream: Option<Stream>,
     playback_stream: Option<Stream>,
     running: Arc<AtomicBool>,
-    // Ring buffer for playback: producer is filled by network, consumer is read by audio thread
-    playback_producer: Option<ringbuf::HeapProd<f32>>,
-    #[allow(dead_code)]
-    playback_consumer: Option<ringbuf::HeapCons<f32>>,
+    // Ring buffer for playback: producer is filled by network/monitoring, consumer is read by audio thread
+    playback_producer: Option<SharedPlaybackProducer>,
     // Local monitoring
     local_monitor_enabled: Arc<AtomicBool>,
 }
@@ -176,9 +177,18 @@ impl AudioEngine {
             playback_stream: None,
             running: Arc::new(AtomicBool::new(false)),
             playback_producer: None,
-            playback_consumer: None,
             local_monitor_enabled: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Get the shared playback producer for external use (e.g., local monitoring)
+    pub fn playback_producer(&self) -> Option<SharedPlaybackProducer> {
+        self.playback_producer.clone()
+    }
+
+    /// Get the local monitoring flag for use in capture callbacks
+    pub fn local_monitor_flag(&self) -> Arc<AtomicBool> {
+        self.local_monitor_enabled.clone()
     }
 
     /// Start audio capture with a callback for captured samples
@@ -270,7 +280,8 @@ impl AudioEngine {
         let buffer_size = (self.config.frame_size * self.config.channels as u32 * 10) as usize;
         let rb = HeapRb::<f32>::new(buffer_size);
         let (producer, consumer) = rb.split();
-        self.playback_producer = Some(producer);
+        // Wrap producer in Arc<Mutex<>> for sharing with capture callback
+        self.playback_producer = Some(Arc::new(std::sync::Mutex::new(producer)));
 
         let consumer = Arc::new(std::sync::Mutex::new(consumer));
         let consumer_clone = consumer.clone();
@@ -310,17 +321,21 @@ impl AudioEngine {
 
     /// Enqueue audio samples for playback
     /// Returns the number of samples actually enqueued
-    pub fn enqueue_playback(&mut self, samples: &[f32]) -> usize {
-        if let Some(ref mut producer) = self.playback_producer {
-            let mut count = 0;
-            for &sample in samples {
-                if producer.try_push(sample).is_ok() {
-                    count += 1;
-                } else {
-                    break;
+    pub fn enqueue_playback(&self, samples: &[f32]) -> usize {
+        if let Some(ref producer) = self.playback_producer {
+            if let Ok(mut prod) = producer.try_lock() {
+                let mut count = 0;
+                for &sample in samples {
+                    if prod.try_push(sample).is_ok() {
+                        count += 1;
+                    } else {
+                        break;
+                    }
                 }
+                count
+            } else {
+                0
             }
-            count
         } else {
             0
         }

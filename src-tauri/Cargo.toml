@@ -28,6 +28,10 @@ uuid = { version = "1", features = ["v4", "serde"] }
 # Link to main library
 jamjam = { path = ".." }
 
+# Audio service dependencies
+crossbeam-channel = "0.5"
+ringbuf = "0.4"
+
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]

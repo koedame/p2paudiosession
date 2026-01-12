@@ -1,5 +1,7 @@
 //! Tauri application library for jamjam
 
+mod audio_service;
+
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::State;
@@ -12,12 +14,13 @@ use jamjam::network::{
     RoomInfo, Session, SessionConfig, SignalingClient, SignalingConnection, SignalingMessage,
 };
 
+use audio_service::AudioServiceHandle;
+
 /// Application state
 pub struct AppState {
     pub session: Arc<Mutex<Option<Session>>>,
     pub config: Arc<Mutex<AudioConfig>>,
-    pub audio_running: Arc<std::sync::atomic::AtomicBool>,
-    pub local_monitoring: Arc<std::sync::atomic::AtomicBool>,
+    pub audio_service: Arc<std::sync::Mutex<AudioServiceHandle>>,
     // Signaling state
     pub signaling_conn: Arc<Mutex<Option<SignalingConnection>>>,
     pub current_room_id: Arc<Mutex<Option<String>>>,
@@ -29,8 +32,7 @@ impl Default for AppState {
         Self {
             session: Arc::new(Mutex::new(None)),
             config: Arc::new(Mutex::new(AudioConfig::default())),
-            audio_running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            local_monitoring: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            audio_service: Arc::new(std::sync::Mutex::new(AudioServiceHandle::new())),
             signaling_conn: Arc::new(Mutex::new(None)),
             current_room_id: Arc::new(Mutex::new(None)),
             my_peer_id: Arc::new(Mutex::new(None)),
@@ -144,18 +146,21 @@ async fn cmd_set_audio_config(
 #[tauri::command]
 async fn cmd_start_audio(
     state: State<'_, AppState>,
-    _input_device: Option<String>,
-    _output_device: Option<String>,
+    input_device: Option<String>,
+    output_device: Option<String>,
 ) -> Result<(), String> {
-    state.audio_running.store(true, std::sync::atomic::Ordering::SeqCst);
-    info!("Audio start requested");
+    let config = state.config.lock().await.clone();
+    let audio_service = state.audio_service.lock().map_err(|e| e.to_string())?;
+    audio_service.start(input_device, output_device, config)?;
+    info!("Audio started");
     Ok(())
 }
 
 #[tauri::command]
 async fn cmd_stop_audio(state: State<'_, AppState>) -> Result<(), String> {
-    state.audio_running.store(false, std::sync::atomic::Ordering::SeqCst);
-    info!("Audio stop requested");
+    let audio_service = state.audio_service.lock().map_err(|e| e.to_string())?;
+    audio_service.stop()?;
+    info!("Audio stopped");
     Ok(())
 }
 
@@ -164,7 +169,8 @@ async fn cmd_set_local_monitoring(
     state: State<'_, AppState>,
     enabled: bool,
 ) -> Result<(), String> {
-    state.local_monitoring.store(enabled, std::sync::atomic::Ordering::SeqCst);
+    let audio_service = state.audio_service.lock().map_err(|e| e.to_string())?;
+    audio_service.set_local_monitoring(enabled)?;
     info!("Local monitoring: {}", enabled);
     Ok(())
 }
@@ -226,8 +232,10 @@ async fn cmd_get_session_status(state: State<'_, AppState>) -> Result<SessionSta
         (false, 0)
     };
 
-    let audio_running = state.audio_running.load(std::sync::atomic::Ordering::SeqCst);
-    let local_monitoring = state.local_monitoring.load(std::sync::atomic::Ordering::SeqCst);
+    let (audio_running, local_monitoring) = {
+        let audio_service = state.audio_service.lock().map_err(|e| e.to_string())?;
+        (audio_service.is_running(), audio_service.is_local_monitoring())
+    };
 
     Ok(SessionStatus {
         connected,
