@@ -40,3 +40,6 @@ Desktop.ini
 docs-site/node_modules/
 docs-site/.docusaurus/
 docs-site/build/
+
+# Private documentation (secrets, tokens, internal server info)
+PrivateDocs/

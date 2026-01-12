@@ -10,10 +10,28 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  security-check:
+    name: Security Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check PrivateDocs not committed
+        run: |
+          if [ -d "PrivateDocs" ] || [ -f "PrivateDocs" ]; then
+            echo "ERROR: PrivateDocs directory/file found in repository!"
+            echo "This directory should never be committed."
+            echo "Please remove it and add to .gitignore"
+            exit 1
+          fi
+          echo "OK: PrivateDocs not found in repository"
+
   check:
     name: Check
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: security-check
     steps:
       - uses: actions/checkout@v4
 
@@ -99,6 +117,7 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: security-check
     steps:
       - uses: actions/checkout@v4
 
