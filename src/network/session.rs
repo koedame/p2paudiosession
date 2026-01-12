@@ -63,6 +63,8 @@ pub struct Session {
     peer_audio_callback: Option<Arc<PeerAudioCallback>>,
     mixed_audio_callback: Option<Arc<MixedAudioCallback>>,
     receive_handle: Option<tokio::task::JoinHandle<()>>,
+    /// Inner receive loop handle from UdpTransport (must be aborted to release socket)
+    inner_recv_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl Session {
@@ -81,6 +83,7 @@ impl Session {
             peer_audio_callback: None,
             mixed_audio_callback: None,
             receive_handle: None,
+            inner_recv_handle: None,
         })
     }
 
@@ -176,6 +179,12 @@ impl Session {
     pub fn stop(&mut self) {
         self.running.store(false, Ordering::SeqCst);
 
+        // Abort inner receive loop first (holds socket reference)
+        if let Some(handle) = self.inner_recv_handle.take() {
+            handle.abort();
+        }
+
+        // Then abort outer receive loop
         if let Some(handle) = self.receive_handle.take() {
             handle.abort();
         }
@@ -235,8 +244,11 @@ impl Session {
         let mixed_callback = self.mixed_audio_callback.clone();
         let enable_mixing = self.config.enable_mixing;
 
+        // Start inner receive loop and store handle for cleanup
+        let (mut rx, inner_handle) = transport.clone().start_receive_loop();
+        self.inner_recv_handle = Some(inner_handle);
+
         let handle = tokio::spawn(async move {
-            let (mut rx, _recv_handle) = transport.clone().start_receive_loop();
 
             while let Some((packet, addr)) = rx.recv().await {
                 if !running.load(Ordering::SeqCst) {
