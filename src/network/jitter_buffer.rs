@@ -23,13 +23,14 @@ impl JitterBufferConfig {
     /// Validate and normalize the configuration
     ///
     /// Returns a validated config with:
-    /// - min_delay_frames >= 1 (0 means no buffering, which defeats the purpose)
-    /// - max_delay_frames >= min_delay_frames
+    /// - min_delay_frames >= 0 (0 = passthrough mode for zero-latency preset)
+    /// - max_delay_frames >= min_delay_frames (at least 1 if min is 0)
     /// - initial_delay_frames clamped between min and max
     /// - frame_duration_ms > 0
     pub fn validated(self) -> Self {
-        let min_delay_frames = self.min_delay_frames.max(1);
-        let max_delay_frames = self.max_delay_frames.max(min_delay_frames);
+        // Allow 0 for passthrough mode (zero-latency preset)
+        let min_delay_frames = self.min_delay_frames;
+        let max_delay_frames = self.max_delay_frames.max(min_delay_frames).max(1);
         let initial_delay_frames = self
             .initial_delay_frames
             .clamp(min_delay_frames, max_delay_frames);
@@ -43,6 +44,19 @@ impl JitterBufferConfig {
             min_delay_frames,
             max_delay_frames,
             initial_delay_frames,
+            frame_duration_ms,
+        }
+    }
+
+    /// Create a passthrough configuration (zero-latency mode)
+    ///
+    /// In passthrough mode, packets are delivered immediately without buffering.
+    /// This minimizes latency but provides no jitter protection.
+    pub fn passthrough(frame_duration_ms: f32) -> Self {
+        Self {
+            min_delay_frames: 0,
+            max_delay_frames: 1,
+            initial_delay_frames: 0,
             frame_duration_ms,
         }
     }
@@ -195,6 +209,8 @@ impl JitterBuffer {
     /// Get next frame for playback
     ///
     /// Returns the next packet in sequence order, or indicates loss/underrun.
+    /// In passthrough mode (current_delay_frames == 0), packets are returned
+    /// immediately without buffering delay.
     pub fn pop(&mut self) -> JitterBufferResult {
         let next_seq = match self.next_play_sequence {
             Some(seq) => seq,
@@ -203,8 +219,9 @@ impl JitterBuffer {
 
         // Check if we should start playing
         if !self.playing {
-            // Wait until we have enough packets buffered
-            if self.depth() < self.current_delay_frames {
+            // Passthrough mode: start immediately without buffering
+            // Normal mode: wait until we have enough packets buffered
+            if self.current_delay_frames > 0 && self.depth() < self.current_delay_frames {
                 return JitterBufferResult::Underrun;
             }
             self.playing = true;
@@ -481,15 +498,19 @@ mod tests {
 
     #[test]
     fn test_config_validation() {
-        // Test that zero min_delay is corrected to 1
+        // Test that zero min_delay is allowed (passthrough mode)
         let config = JitterBufferConfig {
             min_delay_frames: 0,
             max_delay_frames: 5,
-            initial_delay_frames: 2,
+            initial_delay_frames: 0,
             frame_duration_ms: 2.5,
         };
         let validated = config.validated();
-        assert_eq!(validated.min_delay_frames, 1);
+        assert_eq!(
+            validated.min_delay_frames, 0,
+            "Zero should be allowed for passthrough mode"
+        );
+        assert_eq!(validated.initial_delay_frames, 0);
 
         // Test that max_delay < min_delay is corrected
         let config = JitterBufferConfig {
@@ -520,6 +541,32 @@ mod tests {
         };
         let validated = config.validated();
         assert!(validated.frame_duration_ms > 0.0);
+    }
+
+    #[test]
+    fn test_passthrough_mode() {
+        // Passthrough mode: packets are delivered immediately without buffering
+        let config = JitterBufferConfig::passthrough(0.67); // 32 samples @ 48kHz
+        let mut buffer = JitterBuffer::with_config(config);
+
+        // Insert a single packet
+        buffer.insert(0, 0, vec![1, 2, 3]);
+
+        // In passthrough mode, packet should be available immediately
+        match buffer.pop() {
+            JitterBufferResult::Packet { sequence, .. } => {
+                assert_eq!(sequence, 0);
+            }
+            _ => panic!("Expected packet in passthrough mode"),
+        }
+    }
+
+    #[test]
+    fn test_passthrough_config_helper() {
+        let config = JitterBufferConfig::passthrough(0.67);
+        assert_eq!(config.min_delay_frames, 0);
+        assert_eq!(config.initial_delay_frames, 0);
+        assert_eq!(config.max_delay_frames, 1);
     }
 
     #[test]
