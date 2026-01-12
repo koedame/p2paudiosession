@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.jamjam.app",
   "build": {
-    "beforeDevCommand": "cd ui && npm install && npm run dev",
+    "beforeDevCommand": "cd ../ui && npm install && npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "cd ui && npm install && npm run build",
+    "beforeBuildCommand": "cd ../ui && npm install && npm run build",
     "frontendDist": "../ui/dist"
   },
   "app": {
