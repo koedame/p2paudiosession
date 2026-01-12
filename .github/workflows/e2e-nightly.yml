@@ -1,0 +1,224 @@
+name: E2E Tests (Nightly)
+
+on:
+  schedule:
+    # Run at 2:00 AM JST (17:00 UTC previous day)
+    - cron: '0 17 * * *'
+  workflow_dispatch:
+    inputs:
+      run_full_matrix:
+        description: 'Run full cross-platform matrix'
+        required: false
+        default: 'true'
+        type: boolean
+      run_eight_node:
+        description: 'Run 8-node mesh tests'
+        required: false
+        default: 'true'
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build for E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      artifact-name: ${{ steps.upload.outputs.artifact-name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libssl-dev pkg-config
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo target
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: cargo-target-release-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Upload binary artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: jamjam-linux-x64
+          path: target/release/jamjam
+          retention-days: 1
+
+  e2e-loopback-all-presets:
+    name: Loopback (${{ matrix.preset }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        preset:
+          - zero-latency
+          - ultra-low-latency
+          - balanced
+          - high-quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libssl-dev pkg-config pipewire
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-e2e-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: jamjam-linux-x64
+          path: target/release/
+
+      - name: Make binary executable
+        run: chmod +x target/release/jamjam
+
+      - name: Generate audio fixtures
+        working-directory: tests/e2e
+        run: cargo run --bin generate_fixtures
+
+      - name: Run loopback tests for preset
+        working-directory: tests/e2e
+        run: |
+          cargo test --features loopback -- \
+            --test-threads=1 \
+            --nocapture \
+            ${{ matrix.preset }}
+        env:
+          RUST_LOG: info
+          E2E_PRESET: ${{ matrix.preset }}
+
+  e2e-two-node:
+    name: Two-Node Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libssl-dev pkg-config
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-e2e-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: jamjam-linux-x64
+          path: target/release/
+
+      - name: Make binary executable
+        run: chmod +x target/release/jamjam
+
+      - name: Run two-node tests
+        working-directory: tests/e2e
+        run: |
+          cargo test --features network-local two_node -- \
+            --test-threads=1 \
+            --nocapture
+        env:
+          RUST_LOG: info
+
+  # Cross-platform tests require self-hosted runners
+  # This job serves as a placeholder for when self-hosted runners are configured
+  e2e-cross-platform:
+    name: Cross-Platform Matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [e2e-loopback-all-presets, e2e-two-node]
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_full_matrix == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cross-platform test placeholder
+        run: |
+          echo "Cross-platform tests require self-hosted runners"
+          echo "Configure runners for:"
+          echo "  - Linux (ubuntu-latest or self-hosted)"
+          echo "  - macOS (macos-latest or self-hosted)"
+          echo "  - Windows (windows-latest or self-hosted)"
+          echo ""
+          echo "See docs-spec/adr/ADR-010-e2e-test-infrastructure.md for details"
+
+  # Eight-node mesh tests require VPS cluster
+  # This job serves as a placeholder for when the cluster is provisioned
+  e2e-eight-node:
+    name: Eight-Node Mesh
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    needs: [e2e-loopback-all-presets, e2e-two-node]
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_eight_node == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Eight-node mesh test placeholder
+        run: |
+          echo "Eight-node mesh tests require VPS cluster"
+          echo "Configure cluster with:"
+          echo "  - Control plane: 1 node (orchestrator + PESQ)"
+          echo "  - Test nodes: 8 nodes (Linux x4, macOS x2, Windows x2)"
+          echo ""
+          echo "Estimated monthly cost: ~$300"
+          echo "See docs-spec/adr/ADR-010-e2e-test-infrastructure.md for details"
+
+  summary:
+    name: E2E Summary
+    runs-on: ubuntu-latest
+    needs: [e2e-loopback-all-presets, e2e-two-node]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          echo "=== E2E Nightly Test Summary ==="
+          echo ""
+          echo "Loopback tests: ${{ needs.e2e-loopback-all-presets.result }}"
+          echo "Two-node tests: ${{ needs.e2e-two-node.result }}"
+          echo ""
+          if [[ "${{ needs.e2e-loopback-all-presets.result }}" != "success" ]] || \
+             [[ "${{ needs.e2e-two-node.result }}" != "success" ]]; then
+            echo "Some tests failed!"
+            exit 1
+          fi
+          echo "All tests passed!"

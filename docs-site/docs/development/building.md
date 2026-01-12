@@ -67,13 +67,15 @@ cargo build --release
 
 ### Tauri GUI (デスクトップアプリ)
 
-```bash
-cd src-tauri
+:::caution
+Tauriコマンドは必ず**プロジェクトルート**から実行してください。`src-tauri` ディレクトリからの実行はサポートされていません（[ADR-009](/docs-spec/adr/ADR-009-tauri-build-commands) 参照）。
+:::
 
-# 開発サーバー起動
+```bash
+# 開発サーバー起動（プロジェクトルートから実行）
 cargo tauri dev
 
-# リリースビルド
+# リリースビルド（プロジェクトルートから実行）
 cargo tauri build
 ```
 

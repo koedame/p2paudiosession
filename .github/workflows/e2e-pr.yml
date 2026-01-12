@@ -1,0 +1,170 @@
+name: E2E Tests (PR)
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  e2e-loopback:
+    name: E2E Loopback Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libssl-dev pkg-config pipewire pipewire-pulse wireplumber
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-registry-
+
+      - name: Cache cargo git
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: cargo-git-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-git-
+
+      - name: Cache cargo target
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: cargo-target-e2e-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-target-e2e-${{ runner.os }}-
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Setup virtual audio
+        run: |
+          chmod +x tests/e2e/scripts/setup-virtual-audio-linux.sh
+          # Start PipeWire in background if available
+          if command -v pipewire &> /dev/null; then
+            echo "PipeWire available, attempting to start..."
+            # PipeWire may already be running in CI environment
+            pipewire &>/dev/null &
+            sleep 1
+            pipewire-pulse &>/dev/null &
+            sleep 1
+            wireplumber &>/dev/null &
+            sleep 2
+          fi
+          # Check virtual audio status
+          ./tests/e2e/scripts/setup-virtual-audio-linux.sh status || echo "Virtual audio check completed"
+
+      - name: Generate audio fixtures
+        working-directory: tests/e2e
+        run: cargo run --bin generate_fixtures
+
+      - name: Run E2E loopback tests
+        working-directory: tests/e2e
+        run: |
+          cargo test --features loopback -- --test-threads=1 --nocapture
+        env:
+          RUST_LOG: info
+          RUST_BACKTRACE: 1
+
+  e2e-network-local:
+    name: E2E Local Network Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: e2e-loopback
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libssl-dev pkg-config
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-registry-
+
+      - name: Cache cargo git
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: cargo-git-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-git-
+
+      - name: Cache cargo target
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: cargo-target-e2e-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-target-e2e-${{ runner.os }}-
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Run E2E network local tests
+        working-directory: tests/e2e
+        run: |
+          cargo test --features network-local -- --test-threads=1 --nocapture
+        env:
+          RUST_LOG: info
+          RUST_BACKTRACE: 1
+
+  e2e-integration:
+    name: E2E Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libssl-dev pkg-config
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-e2e-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-e2e-${{ runner.os }}-
+
+      - name: Generate audio fixtures
+        working-directory: tests/e2e
+        run: cargo run --bin generate_fixtures
+
+      - name: Run integration tests
+        working-directory: tests/e2e
+        run: |
+          cargo test --features full -- --test-threads=1
+        env:
+          RUST_LOG: info

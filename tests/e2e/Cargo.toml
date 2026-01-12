@@ -1,0 +1,54 @@
+[package]
+name = "jamjam-e2e-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "End-to-end test infrastructure for jamjam"
+
+[dependencies]
+# Core jamjam library
+jamjam = { path = "../.." }
+
+# Async runtime
+tokio = { version = "1", features = ["full", "test-util"] }
+
+# Audio file handling
+hound = "3.5"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# UUID for test identification
+uuid = { version = "1.0", features = ["v4"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+thiserror = "1"
+
+# Process management for multi-node tests
+which = "6"
+
+# SSH for remote node control (optional)
+# ssh2 = { version = "0.9", optional = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[features]
+default = []
+# Enable loopback tests with virtual audio
+loopback = []
+# Enable localhost network tests
+network-local = []
+# Enable remote multi-node tests
+remote = []
+# Full test suite
+full = ["loopback", "network-local", "remote"]
+
+[[bin]]
+name = "generate_fixtures"
+path = "src/bin/generate_fixtures.rs"

@@ -48,8 +48,8 @@ cd p2paudiosession
 # Rustコアのビルド
 cargo build --release
 
-# Tauri GUIビルド
-cd src-tauri && cargo tauri build
+# Tauri GUIビルド（プロジェクトルートから実行）
+cargo tauri build
 ```
 
 #### ビルド依存関係

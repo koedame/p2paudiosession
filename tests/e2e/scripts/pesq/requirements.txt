@@ -1,0 +1,5 @@
+# PESQ evaluation dependencies
+pesq>=0.0.4
+numpy>=1.21.0
+scipy>=1.7.0
+soundfile>=0.12.0

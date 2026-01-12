@@ -36,6 +36,8 @@ sidebar_position: 1
 | [ADR-006](./adr/ADR-006-fec-strategy.md) | FEC（前方誤り訂正）採用 |
 | [ADR-007](./adr/ADR-007-i18n-library.md) | i18nライブラリ選定 |
 | [ADR-008](./adr/ADR-008-zero-latency-mode.md) | ゼロレイテンシーモード |
+| [ADR-009](./adr/ADR-009-tauri-build-commands.md) | Tauriビルドコマンド戦略 |
+| [ADR-010](./adr/ADR-010-e2e-test-infrastructure.md) | E2Eテストインフラストラクチャ |
 
 ---
 
