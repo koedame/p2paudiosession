@@ -20,6 +20,9 @@ opus = { version = "0.3", optional = true }
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
+# Socket options (SO_REUSEADDR)
+socket2 = { version = "0.5", features = ["all"] }
+
 # CLI
 clap = { version = "4", features = ["derive"] }
 

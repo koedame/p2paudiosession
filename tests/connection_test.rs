@@ -90,3 +90,75 @@ async fn test_connection_initial_state() {
         "Local address should have valid port"
     );
 }
+
+/// Test: Session can be recreated on same port after stop
+/// This verifies SO_REUSEADDR is working correctly
+#[tokio::test]
+async fn test_session_recreate_same_port() {
+    // Create first session with auto-assigned port
+    let config1 = SessionConfig::default();
+    let mut session1 = Session::new(config1)
+        .await
+        .expect("Failed to create first session");
+    session1.start();
+
+    let port = session1.local_addr().port();
+
+    // Stop and drop the first session
+    session1.stop();
+    drop(session1);
+
+    // Small delay to ensure cleanup
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    // Create second session on the same port
+    let config2 = SessionConfig {
+        local_port: port,
+        max_peers: 10,
+        enable_mixing: true,
+    };
+
+    let session2 = Session::new(config2).await;
+    assert!(
+        session2.is_ok(),
+        "Should be able to create session on same port after stop: {:?}",
+        session2.err()
+    );
+    assert_eq!(session2.unwrap().local_addr().port(), port);
+}
+
+/// Test: Multiple session create/stop cycles on same port
+#[tokio::test]
+async fn test_session_repeated_recreate() {
+    // Get an available port
+    let config = SessionConfig::default();
+    let session = Session::new(config)
+        .await
+        .expect("Failed to create initial session");
+    let port = session.local_addr().port();
+    drop(session);
+
+    // Perform multiple create/stop cycles
+    for i in 0..5 {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let config = SessionConfig {
+            local_port: port,
+            max_peers: 10,
+            enable_mixing: true,
+        };
+
+        let session = Session::new(config).await;
+        assert!(
+            session.is_ok(),
+            "Session creation cycle {} should succeed: {:?}",
+            i + 1,
+            session.err()
+        );
+
+        let mut s = session.unwrap();
+        s.start();
+        s.stop();
+        drop(s);
+    }
+}

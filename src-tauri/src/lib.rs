@@ -177,6 +177,10 @@ async fn cmd_leave_session(state: State<'_, AppState>) -> Result<(), String> {
     }
 
     *session_guard = None;
+
+    // Allow time for socket resources to be fully released by OS
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
     info!("Left session");
     Ok(())
 }

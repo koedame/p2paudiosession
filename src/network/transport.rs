@@ -3,6 +3,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use socket2::{Domain, Protocol, Socket, Type};
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, trace};
@@ -18,11 +19,36 @@ pub struct UdpTransport {
 }
 
 impl UdpTransport {
-    /// Bind to a local address
+    /// Bind to a local address with SO_REUSEADDR enabled
     pub async fn bind(addr: &str) -> Result<Self, NetworkError> {
-        let socket = UdpSocket::bind(addr).await?;
+        let parsed_addr: SocketAddr = addr.parse()?;
+
+        // Create socket with socket2 for SO_REUSEADDR support
+        let domain = if parsed_addr.is_ipv4() {
+            Domain::IPV4
+        } else {
+            Domain::IPV6
+        };
+        let socket = Socket::new(domain, Type::DGRAM, Some(Protocol::UDP))?;
+
+        // Enable SO_REUSEADDR to allow quick rebind after session leave
+        socket.set_reuse_address(true)?;
+
+        // Set non-blocking mode for async operation
+        socket.set_nonblocking(true)?;
+
+        // Bind to the address
+        socket.bind(&parsed_addr.into())?;
+
+        // Convert to Tokio UdpSocket
+        let std_socket: std::net::UdpSocket = socket.into();
+        let socket = UdpSocket::from_std(std_socket)?;
         let local_addr = socket.local_addr()?;
-        info!("UDP transport bound to {}", local_addr);
+
+        info!(
+            "UDP transport bound to {} (SO_REUSEADDR enabled)",
+            local_addr
+        );
 
         Ok(Self {
             socket: Arc::new(socket),
@@ -111,5 +137,42 @@ mod tests {
         assert_eq!(received.timestamp, 100);
         assert_eq!(received.payload, vec![1, 2, 3, 4]);
         assert_eq!(from_addr, transport1.local_addr());
+    }
+
+    /// Test SO_REUSEADDR allows rebinding to same port after drop
+    #[tokio::test]
+    async fn test_transport_port_reuse() {
+        // First bind to get an assigned port
+        let transport1 = UdpTransport::bind("127.0.0.1:0").await.unwrap();
+        let port = transport1.local_addr().port();
+        let addr = format!("127.0.0.1:{}", port);
+
+        // Drop the first transport
+        drop(transport1);
+
+        // Should be able to immediately rebind to the same port (SO_REUSEADDR)
+        let transport2 = UdpTransport::bind(&addr).await;
+        assert!(
+            transport2.is_ok(),
+            "Should be able to rebind to same port with SO_REUSEADDR"
+        );
+        assert_eq!(transport2.unwrap().local_addr().port(), port);
+    }
+
+    /// Test multiple consecutive rebinds to same port
+    #[tokio::test]
+    async fn test_transport_repeated_port_reuse() {
+        // First bind to get an assigned port
+        let transport = UdpTransport::bind("127.0.0.1:0").await.unwrap();
+        let port = transport.local_addr().port();
+        let addr = format!("127.0.0.1:{}", port);
+        drop(transport);
+
+        // Rebind multiple times in succession
+        for i in 0..5 {
+            let transport = UdpTransport::bind(&addr).await;
+            assert!(transport.is_ok(), "Rebind attempt {} should succeed", i + 1);
+            drop(transport);
+        }
     }
 }
