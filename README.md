@@ -39,8 +39,9 @@ cargo test
 ### Running the Desktop App (Tauri)
 
 ```bash
+# Run from project root (not src-tauri directory)
+
 # Development mode (frontend server starts automatically)
-cd src-tauri
 cargo tauri dev
 
 # Production build
