@@ -34,9 +34,9 @@
     "title": "Audio Settings",
     "inputDevice": "Input Device",
     "outputDevice": "Output Device",
-    "sampleRate": "Sample Rate",
-    "frameSize": "Frame Size",
-    "localMonitoring": "Local Monitoring",
+    "sampleRate": "Quality",
+    "frameSize": "Responsiveness",
+    "localMonitoring": "Hear Yourself",
     "start": "Start Audio",
     "stop": "Stop Audio",
     "default": "Default"
@@ -52,26 +52,27 @@
   "settings": {
     "title": "Settings",
     "language": "Language",
-    "preset": "Preset",
+    "preset": "Mode",
     "presets": {
-      "ultraLowLatency": "Ultra Low Latency",
-      "balanced": "Balanced",
-      "highQuality": "High Quality"
+      "zeroLatency": "Fastest Mode",
+      "ultraLowLatency": "Low Delay Mode",
+      "balanced": "Balanced Mode",
+      "highQuality": "High Quality Mode"
     },
     "advanced": "Advanced Settings",
-    "codec": "Codec",
-    "encryption": "Enable Encryption (DTLS)",
-    "jitterBuffer": "Jitter Buffer (ms)",
-    "fec": "Forward Error Correction"
+    "codec": "Compression",
+    "encryption": "Enable Encryption",
+    "jitterBuffer": "Buffer (ms)",
+    "fec": "Error Correction"
   },
   "connection": {
     "title": "Connection Info",
-    "rtt": "Round Trip Time",
-    "packetLoss": "Packet Loss",
-    "jitter": "Jitter",
-    "bandwidth": "Bandwidth",
-    "bytesSent": "Bytes Sent",
-    "bytesReceived": "Bytes Received",
+    "rtt": "Delay",
+    "packetLoss": "Connection Stability",
+    "jitter": "Fluctuation",
+    "bandwidth": "Speed",
+    "bytesSent": "Data Sent",
+    "bytesReceived": "Data Received",
     "packetsSent": "Packets Sent",
     "packetsReceived": "Packets Received"
   },
@@ -87,6 +88,15 @@
     "cancel": "Cancel",
     "save": "Save",
     "close": "Close",
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "copied": "Copied!"
+  },
+  "validation": {
+    "enterRoomCode": "Please enter a room code",
+    "enterAddress": "Please enter an address"
+  },
+  "info": {
+    "roomCodeNotImplemented": "Room code join is not yet available",
+    "directConnectNotImplemented": "Direct connect is not yet available"
   }
 }

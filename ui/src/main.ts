@@ -64,8 +64,8 @@ function renderApp(): void {
           <button class="nav-btn" data-screen="connection">${t("nav.connection")}</button>
         </nav>
       </div>
-      <div class="status" id="status">
-        <span class="status-dot"></span>
+      <div class="status" id="status" role="status" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
         <span class="status-text">${t("status.disconnected")}</span>
       </div>
     </header>
@@ -104,7 +104,7 @@ function renderApp(): void {
     </footer>
 
     <!-- Toast Container -->
-    <div class="toast-container" id="toast-container"></div>
+    <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div>
   `;
 }
 
@@ -227,13 +227,16 @@ function renderLocalChannel(): string {
   return `
     <div class="channel local">
       <div class="channel-label">${t("mixer.you")}</div>
-      <div class="meter">
+      <div class="meter" aria-hidden="true">
         <div class="meter-fill" id="meter-local"></div>
       </div>
-      <input type="range" class="volume-slider" id="volume-local" min="0" max="100" value="100">
+      <input type="range" class="volume-slider" id="volume-local" min="0" max="100" value="100"
+        aria-label="${t("mixer.volume")}"
+        aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
       <div class="channel-controls">
-        <button class="btn-icon" id="mute-local" title="${t("mixer.mute")}">
-          <span class="icon">M</span>
+        <button class="btn-icon" id="mute-local" title="${t("mixer.mute")}"
+          aria-label="${t("mixer.mute")}" aria-pressed="false">
+          <span class="icon" aria-hidden="true">M</span>
         </button>
       </div>
     </div>
@@ -533,13 +536,13 @@ async function joinSession(): Promise<void> {
   )?.value;
 
   if (!roomCode) {
-    showToast("Please enter a room code", "error");
+    showToast(t("validation.enterRoomCode"), "error");
     return;
   }
 
   // TODO: Implement signaling server connection
   // Will use _password when signaling is implemented
-  showToast("Room code join not yet implemented", "info");
+  showToast(t("info.roomCodeNotImplemented"), "info");
 }
 
 // Direct connect to IP:Port
@@ -549,12 +552,12 @@ async function directConnect(): Promise<void> {
   )?.value;
 
   if (!address) {
-    showToast("Please enter an address", "error");
+    showToast(t("validation.enterAddress"), "error");
     return;
   }
 
   // TODO: Implement direct connection
-  showToast("Direct connect not yet implemented", "info");
+  showToast(t("info.directConnectNotImplemented"), "info");
 }
 
 // Leave session
@@ -575,7 +578,7 @@ function copyInvite(): void {
   const inviteInput = elements.inviteCode as HTMLInputElement;
   if (inviteInput) {
     navigator.clipboard.writeText(inviteInput.value);
-    showToast("Copied!", "success");
+    showToast(t("common.copied"), "success");
   }
 }
 
@@ -656,6 +659,11 @@ function toggleLocalMute(): void {
     const icon = muteBtn.querySelector(".icon");
     if (icon) icon.textContent = state.localMuted ? "M" : "M";
     muteBtn.classList.toggle("active", state.localMuted);
+    muteBtn.setAttribute("aria-pressed", state.localMuted.toString());
+    muteBtn.setAttribute(
+      "aria-label",
+      state.localMuted ? t("mixer.unmute") : t("mixer.mute")
+    );
   }
 }
 
@@ -747,13 +755,16 @@ function createPeerChannel(peer: PeerInfo): HTMLElement {
 
   channel.innerHTML = `
     <div class="channel-label">${escapeHtml(peer.name)}</div>
-    <div class="meter">
+    <div class="meter" aria-hidden="true">
       <div class="meter-fill" id="meter-${peer.id}"></div>
     </div>
-    <input type="range" class="volume-slider" id="volume-${peer.id}" min="0" max="100" value="100">
+    <input type="range" class="volume-slider" id="volume-${peer.id}" min="0" max="100" value="100"
+      aria-label="${t("mixer.volume")} - ${escapeHtml(peer.name)}"
+      aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
     <div class="channel-controls">
-      <button class="btn-icon" title="${t("mixer.mute")}">
-        <span class="icon">M</span>
+      <button class="btn-icon" title="${t("mixer.mute")}"
+        aria-label="${t("mixer.mute")} - ${escapeHtml(peer.name)}" aria-pressed="false">
+        <span class="icon" aria-hidden="true">M</span>
       </button>
     </div>
   `;
@@ -772,21 +783,44 @@ function createPeerChannel(peer: PeerInfo): HTMLElement {
 // Show toast notification
 function showToast(
   message: string,
-  type: "success" | "error" | "info" = "info"
+  type: "success" | "error" | "info" | "warning" = "info"
 ): void {
   const container = document.getElementById("toast-container");
   if (!container) return;
 
   const toast = document.createElement("div");
   toast.className = `toast ${type}`;
-  toast.textContent = message;
+
+  // Duration based on type (per UI/UX guideline)
+  const durations: Record<string, number> = {
+    success: 3000,
+    info: 4000,
+    warning: 5000,
+    error: 0, // Infinite - requires manual close
+  };
+
+  const duration = durations[type] || 4000;
+  const needsCloseButton = type === "warning" || type === "error";
+
+  if (needsCloseButton) {
+    toast.innerHTML = `
+      <span class="toast-message">${escapeHtml(message)}</span>
+      <button class="toast-close" aria-label="${t("common.close")}">×</button>
+    `;
+    const closeBtn = toast.querySelector(".toast-close");
+    closeBtn?.addEventListener("click", () => toast.remove());
+  } else {
+    toast.textContent = message;
+  }
 
   container.appendChild(toast);
 
-  // Auto remove after 3 seconds
-  setTimeout(() => {
-    toast.remove();
-  }, 3000);
+  // Auto remove after duration (if not infinite)
+  if (duration > 0) {
+    setTimeout(() => {
+      toast.remove();
+    }, duration);
+  }
 }
 
 // Escape HTML

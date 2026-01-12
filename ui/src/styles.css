@@ -1,6 +1,7 @@
 /* jamjam UI Styles */
 
 :root {
+    /* Colors */
     --bg-primary: #1a1a2e;
     --bg-secondary: #16213e;
     --bg-panel: #0f3460;
@@ -11,8 +12,33 @@
     --warning: #fbbf24;
     --text-primary: #ffffff;
     --text-secondary: #94a3b8;
+    --text-disabled: #606070;
     --border: #334155;
     --border-focus: #e94560;
+
+    /* Spacing */
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 32px;
+    --space-2xl: 48px;
+
+    /* Border Radius */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-full: 9999px;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.15);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.2);
+
+    /* Transitions */
+    --transition-fast: 100ms ease-out;
+    --transition-normal: 200ms ease-out;
+    --transition-slow: 300ms ease-out;
 }
 
 * {
@@ -196,8 +222,19 @@ body {
 
 .form-group input:focus,
 .form-group select:focus {
-    outline: none;
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
     border-color: var(--border-focus);
+}
+
+/* Global focus styles for accessibility */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
 }
 
 .form-group input:disabled,
@@ -558,6 +595,29 @@ body {
     border-color: var(--accent);
 }
 
+.toast.warning {
+    border-color: var(--warning);
+}
+
+.toast-message {
+    flex: 1;
+}
+
+.toast-close {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.25rem;
+    line-height: 1;
+    padding: 0 0.25rem;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.toast-close:hover {
+    color: var(--text-primary);
+}
+
 @keyframes slideIn {
     from {
         transform: translateX(100%);
@@ -624,4 +684,24 @@ body {
 .empty-state p {
     margin-top: 0.5rem;
     font-size: 0.875rem;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    .status-dot {
+        animation: none;
+    }
+
+    .spinner {
+        animation: none;
+    }
 }

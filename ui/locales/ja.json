@@ -34,9 +34,9 @@
     "title": "オーディオ設定",
     "inputDevice": "入力デバイス",
     "outputDevice": "出力デバイス",
-    "sampleRate": "サンプルレート",
-    "frameSize": "フレームサイズ",
-    "localMonitoring": "ローカルモニタリング",
+    "sampleRate": "音質",
+    "frameSize": "反応速度",
+    "localMonitoring": "自分の声を聞く",
     "start": "オーディオ開始",
     "stop": "オーディオ停止",
     "default": "デフォルト"
@@ -52,26 +52,27 @@
   "settings": {
     "title": "設定",
     "language": "言語",
-    "preset": "プリセット",
+    "preset": "モード",
     "presets": {
-      "ultraLowLatency": "超低遅延",
-      "balanced": "バランス",
-      "highQuality": "高音質"
+      "zeroLatency": "最速モード",
+      "ultraLowLatency": "低遅延モード",
+      "balanced": "バランスモード",
+      "highQuality": "高音質モード"
     },
     "advanced": "詳細設定",
-    "codec": "コーデック",
-    "encryption": "暗号化を有効にする (DTLS)",
-    "jitterBuffer": "ジッターバッファ (ms)",
-    "fec": "前方誤り訂正"
+    "codec": "圧縮方式",
+    "encryption": "暗号化を有効にする",
+    "jitterBuffer": "バッファ (ms)",
+    "fec": "エラー補正"
   },
   "connection": {
     "title": "接続情報",
-    "rtt": "往復遅延時間",
-    "packetLoss": "パケットロス",
-    "jitter": "ジッター",
-    "bandwidth": "帯域幅",
-    "bytesSent": "送信バイト数",
-    "bytesReceived": "受信バイト数",
+    "rtt": "遅延",
+    "packetLoss": "接続の安定性",
+    "jitter": "ゆらぎ",
+    "bandwidth": "通信速度",
+    "bytesSent": "送信データ量",
+    "bytesReceived": "受信データ量",
     "packetsSent": "送信パケット数",
     "packetsReceived": "受信パケット数"
   },
@@ -87,6 +88,15 @@
     "cancel": "キャンセル",
     "save": "保存",
     "close": "閉じる",
-    "loading": "読み込み中..."
+    "loading": "読み込み中...",
+    "copied": "コピーしました"
+  },
+  "validation": {
+    "enterRoomCode": "ルームコードを入力してください",
+    "enterAddress": "アドレスを入力してください"
+  },
+  "info": {
+    "roomCodeNotImplemented": "ルームコード参加は開発中です",
+    "directConnectNotImplemented": "直接接続は開発中です"
   }
 }
