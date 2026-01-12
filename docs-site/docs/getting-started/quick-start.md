@@ -42,7 +42,7 @@ jamjamで最初のセッションを始める手順を説明します。
 
 | プリセット | 用途 |
 |-----------|------|
-| ultra-low-latency | LAN環境での低遅延（< 5ms） |
+| ultra-low-latency | LAN環境（遅延 < 5ms） |
 | balanced | 標準的なインターネット接続 |
 | high-quality | 高音質優先 |
 

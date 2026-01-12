@@ -22,6 +22,44 @@ Signalingモジュールは以下の責務を持つ:
 
 シグナリングはP2P接続確立のための補助であり、音声データは経由しない。
 
+### 1.1 通信フロー
+
+```mermaid
+sequenceDiagram
+    participant A as Client A (Host)
+    participant S as Signaling Server
+    participant B as Client B
+
+    A->>S: connect()
+    S-->>A: Connected
+
+    A->>S: create_room()
+    S-->>A: room_created (invite_code)
+
+    B->>S: connect()
+    S-->>B: Connected
+
+    B->>S: join_room_by_code(invite_code)
+    S-->>B: room_joined (participants)
+    S-->>A: participant_joined (B)
+
+    Note over A,B: P2P Connection Setup
+    A->>S: send_offer(B)
+    S-->>B: OfferReceived (from A)
+    B->>S: send_answer(A)
+    S-->>A: AnswerReceived (from B)
+
+    par ICE Exchange
+        A->>S: ice_candidate(B)
+        S-->>B: IceCandidateReceived
+    and
+        B->>S: ice_candidate(A)
+        S-->>A: IceCandidateReceived
+    end
+
+    Note over A,B: P2P Audio Stream Established
+```
+
 ---
 
 ## 2. プロトコル
@@ -242,6 +280,27 @@ enum SignalingEvent {
 fn set_event_listener<F>(&self, listener: F)
 where
     F: Fn(SignalingEvent) + Send + 'static;
+```
+
+### 5.1 接続状態遷移
+
+```mermaid
+stateDiagram-v2
+    [*] --> Disconnected
+
+    Disconnected --> Connecting: connect()
+    Connecting --> Connected: Connected event
+    Connecting --> Disconnected: ConnectionFailed
+
+    Connected --> JoiningRoom: join_room() / create_room()
+    JoiningRoom --> InRoom: room_joined / room_created
+    JoiningRoom --> Connected: RoomNotFound / RoomFull / InvalidPassword
+
+    InRoom --> Connected: leave_room()
+    InRoom --> Disconnected: RoomClosed
+    InRoom --> Disconnected: Disconnected event
+
+    Connected --> Disconnected: Disconnected event
 ```
 
 ---
