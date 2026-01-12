@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: jamjam について
-description: ミュージシャン向け超低レイテンシP2P音声通信アプリ
+description: ミュージシャン向け低遅延（< 2ms）P2P音声通信アプリ
 ---
 
 :::note
@@ -11,7 +11,7 @@ description: ミュージシャン向け超低レイテンシP2P音声通信ア�
 
 # jamjam
 
-ミュージシャン向け超低レイテンシP2P音声通信アプリ
+ミュージシャン向け低遅延（< 2ms）P2P音声通信アプリ
 
 ## 概要
 
