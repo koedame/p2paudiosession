@@ -76,12 +76,32 @@
     "packetsSent": "Packets Sent",
     "packetsReceived": "Packets Received"
   },
+  "signaling": {
+    "title": "Server Connection",
+    "url": "Server URL",
+    "urlPlaceholder": "ws://localhost:8080",
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "connected": "Connected to server",
+    "disconnected": "Disconnected from server",
+    "rooms": "Available Rooms",
+    "noRooms": "No rooms available",
+    "peers": "{{count}} participant(s)",
+    "hasPassword": "Password required",
+    "joinRoom": "Join",
+    "leaveRoom": "Leave Room",
+    "peerName": "Your Name",
+    "refresh": "Refresh"
+  },
   "error": {
     "generic": "An error occurred",
     "connectionFailed": "Failed to connect",
     "sessionCreateFailed": "Failed to create session",
     "audioStartFailed": "Failed to start audio",
-    "deviceNotFound": "Device not found"
+    "deviceNotFound": "Device not found",
+    "signalingConnectFailed": "Failed to connect to server",
+    "roomJoinFailed": "Failed to join room",
+    "roomListFailed": "Failed to get room list"
   },
   "common": {
     "ok": "OK",
@@ -93,7 +113,9 @@
   },
   "validation": {
     "enterRoomCode": "Please enter a room code",
-    "enterAddress": "Please enter an address"
+    "enterAddress": "Please enter an address",
+    "enterSignalingUrl": "Please enter a server URL",
+    "enterPeerName": "Please enter your name"
   },
   "info": {
     "roomCodeNotImplemented": "Room code join is not yet available",

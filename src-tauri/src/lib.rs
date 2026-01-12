@@ -1,13 +1,16 @@
 //! Tauri application library for jamjam
 
 use serde::{Deserialize, Serialize};
-use tauri::State;
 use std::sync::Arc;
+use tauri::State;
 use tokio::sync::Mutex;
-use tracing::info;
+use tracing::{info, warn};
+use uuid::Uuid;
 
 use jamjam::audio::{list_input_devices, list_output_devices, AudioConfig, AudioDevice};
-use jamjam::network::{Session, SessionConfig};
+use jamjam::network::{
+    RoomInfo, Session, SessionConfig, SignalingClient, SignalingConnection, SignalingMessage,
+};
 
 /// Application state
 pub struct AppState {
@@ -15,6 +18,10 @@ pub struct AppState {
     pub config: Arc<Mutex<AudioConfig>>,
     pub audio_running: Arc<std::sync::atomic::AtomicBool>,
     pub local_monitoring: Arc<std::sync::atomic::AtomicBool>,
+    // Signaling state
+    pub signaling_conn: Arc<Mutex<Option<SignalingConnection>>>,
+    pub current_room_id: Arc<Mutex<Option<String>>>,
+    pub my_peer_id: Arc<Mutex<Option<Uuid>>>,
 }
 
 impl Default for AppState {
@@ -24,6 +31,9 @@ impl Default for AppState {
             config: Arc::new(Mutex::new(AudioConfig::default())),
             audio_running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             local_monitoring: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            signaling_conn: Arc::new(Mutex::new(None)),
+            current_room_id: Arc::new(Mutex::new(None)),
+            my_peer_id: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -75,6 +85,27 @@ impl From<AudioConfig> for AudioConfigDto {
             sample_rate: c.sample_rate,
             channels: c.channels,
             frame_size: c.frame_size,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoomInfoDto {
+    pub id: String,
+    pub name: String,
+    pub peer_count: usize,
+    pub max_peers: usize,
+    pub has_password: bool,
+}
+
+impl From<RoomInfo> for RoomInfoDto {
+    fn from(r: RoomInfo) -> Self {
+        Self {
+            id: r.id,
+            name: r.name,
+            peer_count: r.peer_count,
+            max_peers: r.max_peers,
+            has_password: r.has_password,
         }
     }
 }
@@ -227,6 +258,186 @@ async fn cmd_get_peers(state: State<'_, AppState>) -> Result<Vec<PeerInfoDto>, S
     }
 }
 
+// ============================================
+// Signaling Commands
+// ============================================
+
+#[tauri::command]
+async fn cmd_connect_signaling(state: State<'_, AppState>, url: String) -> Result<(), String> {
+    let mut conn_guard = state.signaling_conn.lock().await;
+
+    if conn_guard.is_some() {
+        return Err("Already connected to signaling server".to_string());
+    }
+
+    let client = SignalingClient::new(&url);
+    let conn = client.connect().await.map_err(|e| e.to_string())?;
+
+    *conn_guard = Some(conn);
+    info!("Connected to signaling server: {}", url);
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn cmd_disconnect_signaling(state: State<'_, AppState>) -> Result<(), String> {
+    let mut conn_guard = state.signaling_conn.lock().await;
+    *conn_guard = None;
+    *state.current_room_id.lock().await = None;
+    *state.my_peer_id.lock().await = None;
+    info!("Disconnected from signaling server");
+    Ok(())
+}
+
+#[tauri::command]
+async fn cmd_list_rooms(state: State<'_, AppState>) -> Result<Vec<RoomInfoDto>, String> {
+    let mut conn_guard = state.signaling_conn.lock().await;
+    let conn = conn_guard
+        .as_mut()
+        .ok_or("Not connected to signaling server")?;
+
+    conn.send(SignalingMessage::ListRooms)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    match conn.recv().await.map_err(|e| e.to_string())? {
+        SignalingMessage::RoomList { rooms } => {
+            Ok(rooms.into_iter().map(Into::into).collect())
+        }
+        SignalingMessage::Error { message } => Err(message),
+        _ => Err("Unexpected response from server".to_string()),
+    }
+}
+
+#[tauri::command]
+async fn cmd_join_room(
+    state: State<'_, AppState>,
+    room_id: String,
+    peer_name: String,
+    password: Option<String>,
+) -> Result<Vec<PeerInfoDto>, String> {
+    // First join the room via signaling
+    let peers = {
+        let mut conn_guard = state.signaling_conn.lock().await;
+        let conn = conn_guard
+            .as_mut()
+            .ok_or("Not connected to signaling server")?;
+
+        conn.send(SignalingMessage::JoinRoom {
+            room_id: room_id.clone(),
+            password,
+            peer_name,
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+
+        match conn.recv().await.map_err(|e| e.to_string())? {
+            SignalingMessage::RoomJoined {
+                room_id: joined_room_id,
+                peer_id,
+                peers,
+            } => {
+                *state.current_room_id.lock().await = Some(joined_room_id.clone());
+                *state.my_peer_id.lock().await = Some(peer_id);
+                info!("Joined room {} as peer {}", joined_room_id, peer_id);
+                peers
+            }
+            SignalingMessage::Error { message } => return Err(message),
+            _ => return Err("Unexpected response from server".to_string()),
+        }
+    };
+
+    // Create UDP session and add discovered peers
+    {
+        let mut session_guard = state.session.lock().await;
+
+        // Clean up existing session if any
+        if let Some(ref mut session) = *session_guard {
+            session.stop();
+        }
+
+        let config = SessionConfig {
+            local_port: 0, // Let OS assign port
+            max_peers: 10,
+            enable_mixing: true,
+        };
+
+        let mut session = Session::new(config).await.map_err(|e| e.to_string())?;
+
+        // Add peers that have UDP addresses
+        for peer in &peers {
+            if let Some(addr) = peer.public_addr.or(peer.local_addr) {
+                info!("Adding peer {} at {}", peer.name, addr);
+                session
+                    .add_peer(peer.clone(), addr)
+                    .await
+                    .map_err(|e| e.to_string())?;
+            } else {
+                warn!("Peer {} has no address, skipping", peer.name);
+            }
+        }
+
+        session.start();
+        let local_addr = session.local_addr();
+        info!("Session created on {}", local_addr);
+
+        *session_guard = Some(session);
+
+        // Update our peer info with UDP address
+        let mut conn_guard = state.signaling_conn.lock().await;
+        if let Some(conn) = conn_guard.as_mut() {
+            let _ = conn
+                .send(SignalingMessage::UpdatePeerInfo {
+                    public_addr: Some(local_addr),
+                    local_addr: Some(local_addr),
+                })
+                .await;
+        }
+    }
+
+    Ok(peers
+        .into_iter()
+        .map(|p| PeerInfoDto {
+            id: p.id.to_string(),
+            name: p.name,
+            volume: 1.0,
+            muted: false,
+        })
+        .collect())
+}
+
+#[tauri::command]
+async fn cmd_leave_room(state: State<'_, AppState>) -> Result<(), String> {
+    // Leave signaling room
+    {
+        let mut conn_guard = state.signaling_conn.lock().await;
+        if let Some(conn) = conn_guard.as_mut() {
+            let _ = conn.send(SignalingMessage::LeaveRoom).await;
+        }
+    }
+
+    // Stop UDP session
+    {
+        let mut session_guard = state.session.lock().await;
+        if let Some(ref mut session) = *session_guard {
+            session.stop();
+        }
+        *session_guard = None;
+    }
+
+    *state.current_room_id.lock().await = None;
+    *state.my_peer_id.lock().await = None;
+
+    info!("Left room");
+    Ok(())
+}
+
+#[tauri::command]
+async fn cmd_get_signaling_status(state: State<'_, AppState>) -> Result<bool, String> {
+    let conn_guard = state.signaling_conn.lock().await;
+    Ok(conn_guard.is_some())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tracing_subscriber::fmt()
@@ -248,6 +459,13 @@ pub fn run() {
             cmd_leave_session,
             cmd_get_session_status,
             cmd_get_peers,
+            // Signaling commands
+            cmd_connect_signaling,
+            cmd_disconnect_signaling,
+            cmd_list_rooms,
+            cmd_join_room,
+            cmd_leave_room,
+            cmd_get_signaling_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

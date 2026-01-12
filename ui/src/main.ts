@@ -7,6 +7,7 @@ import type {
   SessionStatus,
   AudioConfig,
   Screen,
+  RoomInfo,
 } from "./types";
 
 // Application state
@@ -17,6 +18,12 @@ const state = {
   peers: [] as PeerInfo[],
   currentScreen: "main" as Screen,
   localAddr: "",
+  // Signaling state
+  signalingConnected: false,
+  signalingUrl: "",
+  rooms: [] as RoomInfo[],
+  currentRoomId: null as string | null,
+  peerName: "User",
 };
 
 // DOM element cache
@@ -113,12 +120,16 @@ function renderSessionPanel(): string {
     <section class="panel">
       <h2>${t("session.title")}</h2>
       <div class="tabs">
-        <button class="tab-btn active" data-tab="create">${t("session.create")}</button>
-        <button class="tab-btn" data-tab="join">${t("session.join")}</button>
+        <button class="tab-btn active" data-tab="signaling">${t("signaling.title")}</button>
+        <button class="tab-btn" data-tab="create">${t("session.create")}</button>
         <button class="tab-btn" data-tab="direct">${t("session.directConnect")}</button>
       </div>
 
-      <div class="tab-content active" id="tab-create">
+      <div class="tab-content active" id="tab-signaling">
+        ${renderSignalingTab()}
+      </div>
+
+      <div class="tab-content" id="tab-create">
         <div class="form-group">
           <label for="port">${t("session.port")}</label>
           <input type="number" id="port" value="5000" min="1024" max="65535">
@@ -126,20 +137,6 @@ function renderSessionPanel(): string {
         <div class="button-group">
           <button id="btn-create" class="btn btn-primary">${t("session.create")}</button>
           <button id="btn-leave" class="btn btn-danger" disabled>${t("session.leave")}</button>
-        </div>
-      </div>
-
-      <div class="tab-content" id="tab-join">
-        <div class="form-group">
-          <label for="room-code">${t("session.roomCode")}</label>
-          <input type="text" id="room-code" placeholder="ABC123" maxlength="8">
-        </div>
-        <div class="form-group">
-          <label for="room-password">${t("session.password")}</label>
-          <input type="password" id="room-password">
-        </div>
-        <div class="button-group">
-          <button id="btn-join" class="btn btn-primary">${t("session.join")}</button>
         </div>
       </div>
 
@@ -163,6 +160,76 @@ function renderSessionPanel(): string {
       </div>
     </section>
   `;
+}
+
+function renderSignalingTab(): string {
+  if (state.currentRoomId) {
+    // In a room - show room info and leave button
+    return `
+      <div class="room-active">
+        <p class="room-status">${t("signaling.rooms")}: <strong>${state.currentRoomId}</strong></p>
+        <div class="button-group">
+          <button id="btn-leave-room" class="btn btn-danger">${t("signaling.leaveRoom")}</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (state.signalingConnected) {
+    // Connected - show rooms and peer name input
+    return `
+      <div class="signaling-connected">
+        <div class="form-group">
+          <label for="peer-name">${t("signaling.peerName")}</label>
+          <input type="text" id="peer-name" value="${escapeHtml(state.peerName)}" placeholder="User">
+        </div>
+        <div class="room-list-header">
+          <h3>${t("signaling.rooms")}</h3>
+          <button id="btn-refresh-rooms" class="btn btn-secondary btn-small">${t("signaling.refresh")}</button>
+        </div>
+        <div class="room-list" id="room-list">
+          ${renderRoomList()}
+        </div>
+        <div class="button-group">
+          <button id="btn-disconnect-signaling" class="btn btn-danger">${t("signaling.disconnect")}</button>
+        </div>
+      </div>
+    `;
+  }
+
+  // Not connected - show URL input and connect button
+  return `
+    <div class="signaling-disconnected">
+      <div class="form-group">
+        <label for="signaling-url">${t("signaling.url")}</label>
+        <input type="text" id="signaling-url" value="${escapeHtml(state.signalingUrl)}" placeholder="${t("signaling.urlPlaceholder")}">
+      </div>
+      <div class="button-group">
+        <button id="btn-connect-signaling" class="btn btn-primary">${t("signaling.connect")}</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderRoomList(): string {
+  if (state.rooms.length === 0) {
+    return `<p class="no-rooms">${t("signaling.noRooms")}</p>`;
+  }
+
+  return state.rooms
+    .map(
+      (room) => `
+      <div class="room-item" data-room-id="${escapeHtml(room.id)}">
+        <div class="room-info">
+          <span class="room-name">${escapeHtml(room.name)}</span>
+          <span class="room-peers">${t("signaling.peers", { count: room.peer_count })}</span>
+          ${room.has_password ? `<span class="room-locked">${t("signaling.hasPassword")}</span>` : ""}
+        </div>
+        <button class="btn btn-primary btn-small btn-join-room" data-room-id="${escapeHtml(room.id)}">${t("signaling.joinRoom")}</button>
+      </div>
+    `
+    )
+    .join("");
 }
 
 function renderAudioPanel(): string {
@@ -355,7 +422,6 @@ function cacheElements(): void {
     port: document.getElementById("port"),
     btnCreate: document.getElementById("btn-create"),
     btnLeave: document.getElementById("btn-leave"),
-    btnJoin: document.getElementById("btn-join"),
     sessionInfo: document.getElementById("session-info"),
     localAddr: document.getElementById("local-addr"),
     peerCount: document.getElementById("peer-count"),
@@ -370,6 +436,10 @@ function cacheElements(): void {
     mixerChannels: document.getElementById("mixer-channels"),
     muteLocal: document.getElementById("mute-local"),
     languageSelect: document.getElementById("language-select"),
+    // Signaling elements
+    signalingUrl: document.getElementById("signaling-url"),
+    peerName: document.getElementById("peer-name"),
+    roomList: document.getElementById("room-list"),
   };
 }
 
@@ -447,13 +517,41 @@ function setupEventListeners(): void {
   // Session controls
   elements.btnCreate?.addEventListener("click", createSession);
   elements.btnLeave?.addEventListener("click", leaveSession);
-  elements.btnJoin?.addEventListener("click", joinSession);
   document
     .getElementById("btn-direct-connect")
     ?.addEventListener("click", directConnect);
   document
     .getElementById("btn-copy-invite")
     ?.addEventListener("click", copyInvite);
+
+  // Signaling controls
+  document
+    .getElementById("btn-connect-signaling")
+    ?.addEventListener("click", connectSignaling);
+  document
+    .getElementById("btn-disconnect-signaling")
+    ?.addEventListener("click", disconnectSignaling);
+  document
+    .getElementById("btn-refresh-rooms")
+    ?.addEventListener("click", refreshRooms);
+  document
+    .getElementById("btn-leave-room")
+    ?.addEventListener("click", leaveRoom);
+
+  // Room join buttons (dynamically rendered)
+  document.querySelectorAll(".btn-join-room").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const target = e.target as HTMLElement;
+      const roomId = target.dataset.roomId;
+      if (roomId) joinRoom(roomId);
+    });
+  });
+
+  // Peer name change
+  document.getElementById("peer-name")?.addEventListener("change", (e) => {
+    const input = e.target as HTMLInputElement;
+    state.peerName = input.value || "User";
+  });
 
   // Audio controls
   elements.btnStartAudio?.addEventListener("click", startAudio);
@@ -527,22 +625,160 @@ async function createSession(): Promise<void> {
   }
 }
 
-// Join session by room code
-async function joinSession(): Promise<void> {
-  const roomCode = (document.getElementById("room-code") as HTMLInputElement)
-    ?.value;
-  const _password = (
-    document.getElementById("room-password") as HTMLInputElement
-  )?.value;
+// Connect to signaling server
+async function connectSignaling(): Promise<void> {
+  const urlInput = document.getElementById("signaling-url") as HTMLInputElement;
+  const url = urlInput?.value?.trim();
 
-  if (!roomCode) {
-    showToast(t("validation.enterRoomCode"), "error");
+  if (!url) {
+    showToast(t("validation.enterSignalingUrl"), "error");
     return;
   }
 
-  // TODO: Implement signaling server connection
-  // Will use _password when signaling is implemented
-  showToast(t("info.roomCodeNotImplemented"), "info");
+  try {
+    await invoke("cmd_connect_signaling", { url });
+    state.signalingConnected = true;
+    state.signalingUrl = url;
+    showToast(t("signaling.connected"), "success");
+
+    // Refresh room list
+    await refreshRooms();
+
+    // Re-render signaling tab
+    rerenderSignalingTab();
+  } catch (error) {
+    console.error("Failed to connect to signaling server:", error);
+    showToast(t("error.signalingConnectFailed") + ": " + error, "error");
+  }
+}
+
+// Disconnect from signaling server
+async function disconnectSignaling(): Promise<void> {
+  try {
+    await invoke("cmd_disconnect_signaling");
+    state.signalingConnected = false;
+    state.rooms = [];
+    state.currentRoomId = null;
+    showToast(t("signaling.disconnected"), "info");
+
+    // Re-render signaling tab
+    rerenderSignalingTab();
+  } catch (error) {
+    console.error("Failed to disconnect from signaling server:", error);
+  }
+}
+
+// Refresh room list
+async function refreshRooms(): Promise<void> {
+  try {
+    const rooms = await invoke<RoomInfo[]>("cmd_list_rooms");
+    state.rooms = rooms;
+
+    // Re-render room list
+    const roomListEl = document.getElementById("room-list");
+    if (roomListEl) {
+      roomListEl.innerHTML = renderRoomList();
+      // Re-attach join button handlers
+      document.querySelectorAll(".btn-join-room").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          const target = e.target as HTMLElement;
+          const roomId = target.dataset.roomId;
+          if (roomId) joinRoom(roomId);
+        });
+      });
+    }
+  } catch (error) {
+    console.error("Failed to list rooms:", error);
+    showToast(t("error.roomListFailed") + ": " + error, "error");
+  }
+}
+
+// Join a room
+async function joinRoom(roomId: string): Promise<void> {
+  if (!state.peerName) {
+    showToast(t("validation.enterPeerName"), "error");
+    return;
+  }
+
+  try {
+    const peers = await invoke<PeerInfo[]>("cmd_join_room", {
+      roomId,
+      peerName: state.peerName,
+      password: null,
+    });
+
+    state.currentRoomId = roomId;
+    state.sessionActive = true;
+    state.peers = peers;
+
+    showToast(t("session.join") + " OK", "success");
+
+    // Re-render signaling tab
+    rerenderSignalingTab();
+
+    // Show session info
+    const sessionInfo = elements.sessionInfo;
+    if (sessionInfo) sessionInfo.style.display = "block";
+  } catch (error) {
+    console.error("Failed to join room:", error);
+    showToast(t("error.roomJoinFailed") + ": " + error, "error");
+  }
+}
+
+// Leave current room
+async function leaveRoom(): Promise<void> {
+  try {
+    await invoke("cmd_leave_room");
+    state.currentRoomId = null;
+    state.sessionActive = false;
+    state.peers = [];
+
+    showToast(t("session.leave") + " OK", "info");
+
+    // Refresh room list
+    await refreshRooms();
+
+    // Re-render signaling tab
+    rerenderSignalingTab();
+
+    // Hide session info
+    const sessionInfo = elements.sessionInfo;
+    if (sessionInfo) sessionInfo.style.display = "none";
+  } catch (error) {
+    console.error("Failed to leave room:", error);
+  }
+}
+
+// Re-render the signaling tab content
+function rerenderSignalingTab(): void {
+  const tabSignaling = document.getElementById("tab-signaling");
+  if (tabSignaling) {
+    tabSignaling.innerHTML = renderSignalingTab();
+    // Re-attach event listeners for signaling elements
+    document
+      .getElementById("btn-connect-signaling")
+      ?.addEventListener("click", connectSignaling);
+    document
+      .getElementById("btn-disconnect-signaling")
+      ?.addEventListener("click", disconnectSignaling);
+    document
+      .getElementById("btn-refresh-rooms")
+      ?.addEventListener("click", refreshRooms);
+    document
+      .getElementById("btn-leave-room")
+      ?.addEventListener("click", leaveRoom);
+    document.querySelectorAll(".btn-join-room").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        const target = e.target as HTMLElement;
+        const roomId = target.dataset.roomId;
+        if (roomId) joinRoom(roomId);
+      });
+    });
+    document.getElementById("peer-name")?.addEventListener("change", (e) => {
+      const input = e.target as HTMLInputElement;
+      state.peerName = input.value || "User";
+    });
+  }
 }
 
 // Direct connect to IP:Port

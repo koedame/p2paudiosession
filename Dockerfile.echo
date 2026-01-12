@@ -1,0 +1,54 @@
+# Dockerfile for jamjam echo server
+#
+# Build:
+#   docker build -f Dockerfile.echo -t jamjam-echo .
+#
+# Run:
+#   docker run -p 5000:5000/udp -e ECHO_DELAY_MS=3000 jamjam-echo
+
+# Build stage
+FROM rust:1.83-bookworm AS builder
+
+WORKDIR /app
+
+# Copy manifests first for better caching
+COPY Cargo.toml Cargo.lock ./
+
+# Create dummy src to build dependencies
+RUN mkdir -p src/bin && \
+    echo "fn main() {}" > src/main.rs && \
+    echo "fn main() {}" > src/bin/echo_server.rs && \
+    echo "" > src/lib.rs
+
+# Build dependencies only
+RUN cargo build --release --bin echo-server 2>/dev/null || true
+
+# Copy actual source code
+COPY src ./src
+
+# Touch the main files to invalidate cache and rebuild
+RUN touch src/bin/echo_server.rs src/lib.rs
+
+# Build the actual binary
+RUN cargo build --release --bin echo-server
+
+# Runtime stage
+FROM debian:bookworm-slim
+
+# No additional packages needed for echo server (pure UDP)
+
+# Copy binary from builder
+COPY --from=builder /app/target/release/echo-server /usr/local/bin/echo-server
+
+# Create non-root user
+RUN useradd -r -s /bin/false jamjam
+USER jamjam
+
+EXPOSE 5000/udp
+
+# Health check - verify process is running
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD pgrep echo-server || exit 1
+
+ENTRYPOINT ["echo-server"]
+CMD ["--port", "5000", "--host", "0.0.0.0"]

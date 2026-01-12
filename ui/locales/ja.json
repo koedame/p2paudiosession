@@ -76,12 +76,32 @@
     "packetsSent": "送信パケット数",
     "packetsReceived": "受信パケット数"
   },
+  "signaling": {
+    "title": "サーバー接続",
+    "url": "サーバーURL",
+    "urlPlaceholder": "ws://localhost:8080",
+    "connect": "接続",
+    "disconnect": "切断",
+    "connected": "サーバーに接続しました",
+    "disconnected": "サーバーから切断しました",
+    "rooms": "利用可能なルーム",
+    "noRooms": "ルームがありません",
+    "peers": "{{count}}人参加中",
+    "hasPassword": "パスワード必要",
+    "joinRoom": "参加",
+    "leaveRoom": "ルームを退出",
+    "peerName": "あなたの名前",
+    "refresh": "更新"
+  },
   "error": {
     "generic": "エラーが発生しました",
     "connectionFailed": "接続に失敗しました",
     "sessionCreateFailed": "セッションの作成に失敗しました",
     "audioStartFailed": "オーディオの開始に失敗しました",
-    "deviceNotFound": "デバイスが見つかりません"
+    "deviceNotFound": "デバイスが見つかりません",
+    "signalingConnectFailed": "サーバーへの接続に失敗しました",
+    "roomJoinFailed": "ルームへの参加に失敗しました",
+    "roomListFailed": "ルーム一覧の取得に失敗しました"
   },
   "common": {
     "ok": "OK",
@@ -93,7 +113,9 @@
   },
   "validation": {
     "enterRoomCode": "ルームコードを入力してください",
-    "enterAddress": "アドレスを入力してください"
+    "enterAddress": "アドレスを入力してください",
+    "enterSignalingUrl": "サーバーURLを入力してください",
+    "enterPeerName": "名前を入力してください"
   },
   "info": {
     "roomCodeNotImplemented": "ルームコード参加は開発中です",

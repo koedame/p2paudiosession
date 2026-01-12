@@ -37,6 +37,14 @@ export interface ConnectionStats {
   packets_received: number;
 }
 
+export interface RoomInfo {
+  id: string;
+  name: string;
+  peer_count: number;
+  max_peers: number;
+  has_password: boolean;
+}
+
 // Application state
 export interface AppState {
   audioRunning: boolean;

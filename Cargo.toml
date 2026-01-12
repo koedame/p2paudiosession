@@ -30,7 +30,7 @@ tokio = { version = "1", features = ["full"] }
 socket2 = { version = "0.5", features = ["all"] }
 
 # CLI
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 
 # Error handling
 anyhow = "1"
@@ -92,3 +92,7 @@ path = "src/main.rs"
 [[bin]]
 name = "signaling-server"
 path = "src/bin/signaling_server.rs"
+
+[[bin]]
+name = "echo-server"
+path = "src/bin/echo_server.rs"

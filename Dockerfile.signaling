@@ -1,0 +1,57 @@
+# Dockerfile for jamjam signaling server
+#
+# Build:
+#   docker build -f Dockerfile.signaling -t jamjam-signaling .
+#
+# Run:
+#   docker run -p 8080:8080 jamjam-signaling
+
+# Build stage
+FROM rust:1.83-bookworm AS builder
+
+WORKDIR /app
+
+# Copy manifests first for better caching
+COPY Cargo.toml Cargo.lock ./
+
+# Create dummy src to build dependencies
+RUN mkdir -p src/bin && \
+    echo "fn main() {}" > src/main.rs && \
+    echo "fn main() {}" > src/bin/signaling_server.rs && \
+    echo "" > src/lib.rs
+
+# Build dependencies only
+RUN cargo build --release --bin signaling-server 2>/dev/null || true
+
+# Copy actual source code
+COPY src ./src
+
+# Touch the main files to invalidate cache and rebuild
+RUN touch src/bin/signaling_server.rs src/lib.rs
+
+# Build the actual binary
+RUN cargo build --release --bin signaling-server
+
+# Runtime stage
+FROM debian:bookworm-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy binary from builder
+COPY --from=builder /app/target/release/signaling-server /usr/local/bin/signaling-server
+
+# Create non-root user
+RUN useradd -r -s /bin/false jamjam
+USER jamjam
+
+EXPOSE 8080
+
+# Health check endpoint would require implementation
+# For now, just check if process is running
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD pgrep signaling-server || exit 1
+
+ENTRYPOINT ["signaling-server"]
+CMD ["--port", "8080", "--host", "0.0.0.0"]
