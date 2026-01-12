@@ -26,6 +26,8 @@ pub enum AudioCommand {
     Stop,
     /// Enable/disable local monitoring (hear yourself)
     SetLocalMonitoring(bool),
+    /// Enqueue remote audio for playback (from network)
+    EnqueueRemoteAudio(Vec<f32>),
     /// Shutdown the audio thread
     Shutdown,
 }
@@ -125,6 +127,16 @@ impl AudioServiceHandle {
     /// Check if local monitoring is enabled
     pub fn is_local_monitoring(&self) -> bool {
         self.local_monitoring.load(Ordering::SeqCst)
+    }
+
+    /// Enqueue remote audio for playback (non-blocking, drops on overflow)
+    ///
+    /// This is called from the Session's async receive loop to feed
+    /// received audio to the AudioEngine for playback.
+    pub fn enqueue_remote_audio(&self, samples: Vec<f32>) {
+        // Use try_send to avoid blocking in async context
+        // If channel is full, drop the audio (better than blocking)
+        let _ = self.cmd_tx.try_send(AudioCommand::EnqueueRemoteAudio(samples));
     }
 }
 
@@ -232,6 +244,14 @@ fn audio_thread_main(
                 info!("Setting local monitoring: {}", enabled);
                 local_monitoring.store(enabled, Ordering::SeqCst);
                 let _ = resp_tx.send(AudioResponse::Ok);
+            }
+
+            Ok(AudioCommand::EnqueueRemoteAudio(samples)) => {
+                // Feed remote audio to playback buffer
+                if let Some(ref engine) = engine {
+                    engine.enqueue_playback(&samples);
+                }
+                // No response needed - this is fire-and-forget
             }
 
             Ok(AudioCommand::Shutdown) => {

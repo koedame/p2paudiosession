@@ -196,6 +196,14 @@ async fn cmd_create_session(
         .await
         .map_err(|e| e.to_string())?;
 
+    // Register callback to feed received audio to AudioEngine
+    let audio_service = state.audio_service.clone();
+    session.set_mixed_audio_callback(move |samples: &[f32], _timestamp: u32| {
+        if let Ok(service) = audio_service.lock() {
+            service.enqueue_remote_audio(samples.to_vec());
+        }
+    });
+
     session.start();
     let local_addr = session.local_addr().to_string();
 
@@ -384,6 +392,14 @@ async fn cmd_join_room(
                 warn!("Peer {} has no address, skipping", peer.name);
             }
         }
+
+        // Register callback to feed received audio to AudioEngine
+        let audio_service = state.audio_service.clone();
+        session.set_mixed_audio_callback(move |samples: &[f32], _timestamp: u32| {
+            if let Ok(service) = audio_service.lock() {
+                service.enqueue_remote_audio(samples.to_vec());
+            }
+        });
 
         session.start();
         let local_addr = session.local_addr();

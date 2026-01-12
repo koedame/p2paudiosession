@@ -164,7 +164,8 @@ impl AudioCodec for PcmCodec {
     }
 
     fn decode(&mut self, data: &[u8]) -> Result<Vec<f32>, CodecError> {
-        if !data.len().is_multiple_of(4) {
+        #[allow(clippy::manual_is_multiple_of)]
+        if data.len() % 4 != 0 {
             return Err(CodecError::InvalidData(format!(
                 "PCM data length {} is not a multiple of 4",
                 data.len()
