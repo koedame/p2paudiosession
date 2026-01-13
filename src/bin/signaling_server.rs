@@ -395,6 +395,12 @@ async fn process_message(
                     *broadcast_rx = Some(room.broadcast_tx.subscribe());
 
                     info!("Peer {} joined room {}", peer_id, room_id);
+                    for p in &peers {
+                        info!(
+                            "  Existing peer: {} ({}) public_addr={:?}",
+                            p.name, p.id, p.public_addr
+                        );
+                    }
 
                     Some(SignalingMessage::RoomJoined {
                         room_id,

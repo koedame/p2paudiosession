@@ -439,6 +439,13 @@ async fn cmd_join_room(
                 *state.current_room_id.lock().await = Some(joined_room_id.clone());
                 *state.my_peer_id.lock().await = Some(peer_id);
                 info!("Joined room {} as peer {}", joined_room_id, peer_id);
+                info!("Received {} peers from signaling server:", peers.len());
+                for peer in &peers {
+                    info!(
+                        "  Peer: {} (id={}, public_addr={:?}, local_addr={:?})",
+                        peer.name, peer.id, peer.public_addr, peer.local_addr
+                    );
+                }
                 peers
             }
             SignalingMessage::Error { message } => return Err(message),
