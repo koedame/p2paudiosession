@@ -8,7 +8,10 @@ use tracing::{info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 
 use jamjam::audio::{list_input_devices, list_output_devices, AudioConfig, AudioEngine, DeviceId};
-use jamjam::network::{Connection, SignalingClient, SignalingMessage};
+use jamjam::network::{
+    Connection, ConnectionStats, LatencyBreakdown, LocalLatencyInfo, PeerLatencyInfo,
+    SignalingClient, SignalingMessage,
+};
 
 #[derive(Parser)]
 #[command(name = "jamjam")]
@@ -160,6 +163,129 @@ fn list_devices() {
     }
 }
 
+/// Print session statistics with latency breakdown
+fn print_session_stats(
+    stats: &ConnectionStats,
+    local_info: &LocalLatencyInfo,
+    peer_info: Option<&PeerLatencyInfo>,
+    peer_name: Option<&str>,
+) {
+    let breakdown =
+        LatencyBreakdown::calculate(local_info, peer_info, stats.rtt_ms, stats.jitter_ms);
+    let peer_label = peer_name.unwrap_or("Peer");
+
+    println!("\n═══════════════════════════════════════════════════════════════");
+    println!(" Session Statistics");
+    println!("═══════════════════════════════════════════════════════════════");
+
+    // Network stats
+    println!("\n Network:");
+    println!("   RTT:          {:>7.2} ms", stats.rtt_ms);
+    println!("   Jitter:       {:>7.2} ms", stats.jitter_ms);
+    println!("   Packet Loss:  {:>7.1} %", stats.packet_loss_rate * 100.0);
+    println!("   Uptime:       {:>7} sec", stats.uptime_seconds);
+
+    // Latency breakdown
+    println!("\n Latency Breakdown:");
+
+    // Upstream (You -> Peer)
+    println!("\n   Upstream (You → {}):", peer_label);
+    println!(
+        "     Capture buffer:    {:>6.2} ms  ({} samples @ {} Hz)",
+        breakdown.upstream.capture_buffer_ms, local_info.frame_size, local_info.sample_rate
+    );
+    println!(
+        "     Encode ({}):    {:>6.2} ms",
+        local_info.codec, breakdown.upstream.encode_ms
+    );
+    println!(
+        "     Network:           {:>6.2} ms  (RTT/2)",
+        breakdown.upstream.network_ms
+    );
+
+    if breakdown.has_peer_info() {
+        println!(
+            "     [{}] Jitter buf: {:>6.2} ms",
+            peer_label, breakdown.upstream.peer_jitter_buffer_ms
+        );
+        println!(
+            "     [{}] Decode:     {:>6.2} ms",
+            peer_label, breakdown.upstream.peer_decode_ms
+        );
+        println!(
+            "     [{}] Playback:   {:>6.2} ms",
+            peer_label, breakdown.upstream.peer_playback_buffer_ms
+        );
+    } else {
+        println!("     [{}] (info not available)", peer_label);
+    }
+    println!("     ─────────────────────────────");
+    println!(
+        "     Total:             {:>6.2} ms",
+        breakdown.upstream_total_ms
+    );
+
+    // Downstream (Peer -> You)
+    println!("\n   Downstream ({} → You):", peer_label);
+    if breakdown.has_peer_info() {
+        println!(
+            "     [{}] Capture:    {:>6.2} ms",
+            peer_label, breakdown.downstream.peer_capture_buffer_ms
+        );
+        println!(
+            "     [{}] Encode:     {:>6.2} ms",
+            peer_label, breakdown.downstream.peer_encode_ms
+        );
+    } else {
+        println!("     [{}] (info not available)", peer_label);
+    }
+    println!(
+        "     Network:           {:>6.2} ms  (RTT/2)",
+        breakdown.downstream.network_ms
+    );
+    println!(
+        "     Jitter buffer:     {:>6.2} ms",
+        breakdown.downstream.jitter_buffer_ms
+    );
+    println!(
+        "     Decode ({}):    {:>6.2} ms",
+        local_info.codec, breakdown.downstream.decode_ms
+    );
+    println!(
+        "     Playback buffer:   {:>6.2} ms  ({} samples)",
+        breakdown.downstream.playback_buffer_ms, local_info.frame_size
+    );
+    println!("     ─────────────────────────────");
+    println!(
+        "     Total:             {:>6.2} ms",
+        breakdown.downstream_total_ms
+    );
+
+    // Summary
+    println!("\n Summary:");
+    println!(
+        "   Upstream total:    {:>7.2} ms",
+        breakdown.upstream_total_ms
+    );
+    println!(
+        "   Downstream total:  {:>7.2} ms",
+        breakdown.downstream_total_ms
+    );
+    println!(
+        "   Round-trip total:  {:>7.2} ms",
+        breakdown.roundtrip_total_ms
+    );
+
+    // Packet stats
+    println!("\n Packets:");
+    println!("   Sent:     {:>10}", stats.packets_sent);
+    println!("   Received: {:>10}", stats.packets_received);
+    println!("   Bytes sent:     {:>10}", stats.bytes_sent);
+    println!("   Bytes received: {:>10}", stats.bytes_received);
+
+    println!("\n═══════════════════════════════════════════════════════════════\n");
+}
+
 async fn run_host(
     port: u16,
     sample_rate: u32,
@@ -208,11 +334,10 @@ async fn run_host(
     audio_engine.stop_playback();
 
     let stats = connection.stats();
-    println!("\nSession statistics:");
-    println!("  Packets sent: {}", stats.packets_sent);
-    println!("  Packets received: {}", stats.packets_received);
-    println!("  Bytes sent: {}", stats.bytes_sent);
-    println!("  Bytes received: {}", stats.bytes_received);
+    let peer_info = connection.peer_latency_info();
+    let local_info = LocalLatencyInfo::from_audio_config(frame_size, sample_rate, "pcm");
+
+    print_session_stats(&stats, &local_info, peer_info.as_ref(), None);
 
     Ok(())
 }
@@ -313,21 +438,19 @@ async fn run_join(
 
     send_task.abort();
 
-    let stats = {
+    let (stats, peer_info) = {
         let mut conn = connection_arc.lock().await;
         let stats = conn.stats();
+        let peer_info = conn.peer_latency_info();
         conn.disconnect();
-        stats
+        (stats, peer_info)
     };
 
     audio_engine.stop_capture();
     audio_engine.stop_playback();
 
-    println!("\nSession statistics:");
-    println!("  Packets sent: {}", stats.packets_sent);
-    println!("  Packets received: {}", stats.packets_received);
-    println!("  Bytes sent: {}", stats.bytes_sent);
-    println!("  Bytes received: {}", stats.bytes_received);
+    let local_info = LocalLatencyInfo::from_audio_config(frame_size, sample_rate, "pcm");
+    print_session_stats(&stats, &local_info, peer_info.as_ref(), None);
 
     Ok(())
 }
@@ -432,6 +555,7 @@ async fn run_join_room(
 
     if let Some(peer) = target_peer {
         let remote_addr = peer.public_addr.unwrap();
+        let peer_display_name = peer.name.clone();
         println!("\nConnecting to peer {} at {}...", peer.name, remote_addr);
 
         let mut connection = Connection::new("0.0.0.0:0").await?;
@@ -519,21 +643,24 @@ async fn run_join_room(
 
         send_task.abort();
 
-        let stats = {
+        let (stats, peer_latency_info) = {
             let mut conn = connection_arc.lock().await;
             let stats = conn.stats();
+            let peer_latency_info = conn.peer_latency_info();
             conn.disconnect();
-            stats
+            (stats, peer_latency_info)
         };
 
         audio_engine.stop_capture();
         audio_engine.stop_playback();
 
-        println!("\nSession statistics:");
-        println!("  Packets sent: {}", stats.packets_sent);
-        println!("  Packets received: {}", stats.packets_received);
-        println!("  Bytes sent: {}", stats.bytes_sent);
-        println!("  Bytes received: {}", stats.bytes_received);
+        let local_info = LocalLatencyInfo::from_audio_config(frame_size, sample_rate, "pcm");
+        print_session_stats(
+            &stats,
+            &local_info,
+            peer_latency_info.as_ref(),
+            Some(&peer_display_name),
+        );
     } else {
         println!("\nNo peers with addresses found in room. Waiting for peers...");
         println!("Press Ctrl+C to exit.\n");

@@ -339,6 +339,16 @@ impl JitterBuffer {
         }
     }
 
+    /// Get current buffer delay in milliseconds
+    pub fn current_delay_ms(&self) -> f32 {
+        self.current_delay_frames as f32 * self.config.frame_duration_ms
+    }
+
+    /// Get frame duration in milliseconds
+    pub fn frame_duration_ms(&self) -> f32 {
+        self.config.frame_duration_ms
+    }
+
     /// Adapt buffer size based on network conditions
     ///
     /// Call this periodically (e.g., every 100ms) to adjust buffer size.

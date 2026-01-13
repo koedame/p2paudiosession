@@ -36,6 +36,7 @@ network/
 ├── stun.rs             # STUNクライアント
 ├── fec.rs              # FEC処理
 ├── jitter_buffer.rs    # Jitterバッファ
+├── latency.rs          # レイテンシ計測・内訳
 ├── sequence_tracker.rs # シーケンス追跡
 └── error.rs            # ネットワークエラー
 ```
@@ -522,7 +523,296 @@ struct ConnectionStats {
 
 ---
 
-## 10. 推奨設定 API
+## 10. レイテンシ計測 API
+
+### 10.1 概要
+
+P2P音声通信のエンドツーエンドレイテンシを計測し、各レイヤー別に内訳を表示する機能。
+
+**測定項目:**
+- RTT（Round-Trip Time）: Ping/Pongパケットで計測
+- 各レイヤーの遅延: オーディオ設定から計算 + ピア間で情報交換
+
+**レイテンシの構成:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      上り（自分 → 相手）                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│ [自分] キャプチャ → エンコード → ネットワーク(片道) →                     │
+│                    → [相手] ジッターバッファ → デコード → 再生           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      下り（相手 → 自分）                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│ [相手] キャプチャ → エンコード → ネットワーク(片道) →                     │
+│                    → [自分] ジッターバッファ → デコード → 再生           │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 10.2 RTT計測プロトコル
+
+LatencyPing/Pongパケットによる定期的なRTT計測。
+
+```mermaid
+sequenceDiagram
+    participant A as Peer A
+    participant B as Peer B
+
+    Note over A,B: 1秒ごとにPing送信
+    A->>B: LatencyPing(seq=1, sent_time=T0)
+    B->>A: LatencyPong(seq=1, original_sent_time=T0)
+    Note over A: RTT = now - T0
+
+    Note over A: 指数移動平均でスムージング
+    Note over A: smoothed_rtt = α * sample + (1-α) * smoothed_rtt
+    Note over A: α = 0.125
+```
+
+### 10.3 パケット構造
+
+```rust
+/// RTT計測リクエスト
+/// PacketType: 0x05
+#[derive(Debug, Clone)]
+pub struct LatencyPing {
+    /// 送信時刻（マイクロ秒、起動時からの経過時間）
+    pub sent_time_us: u64,
+    /// シーケンス番号
+    pub ping_sequence: u32,
+}
+
+/// RTT計測レスポンス
+/// PacketType: 0x06
+#[derive(Debug, Clone)]
+pub struct LatencyPong {
+    /// リクエスト時の送信時刻（そのまま返す）
+    pub original_sent_time_us: u64,
+    /// リクエストのシーケンス番号
+    pub ping_sequence: u32,
+}
+
+/// レイテンシ設定情報
+/// PacketType: 0x07
+/// 接続時および5秒ごとに送信
+#[derive(Debug, Clone)]
+pub struct LatencyInfoMessage {
+    /// キャプチャバッファ遅延（ms）
+    pub capture_buffer_ms: f32,
+    /// 再生バッファ遅延（ms）
+    pub playback_buffer_ms: f32,
+    /// エンコード遅延（ms）
+    pub encode_ms: f32,
+    /// デコード遅延（ms）
+    pub decode_ms: f32,
+    /// ジッターバッファ遅延（ms）
+    pub jitter_buffer_ms: f32,
+    /// フレームサイズ（サンプル数）
+    pub frame_size: u32,
+    /// サンプルレート（Hz）
+    pub sample_rate: u32,
+    /// コーデック名
+    pub codec: String,
+}
+```
+
+### 10.4 ピアレイテンシ情報
+
+```rust
+/// リモートピアから受信したレイテンシ設定情報
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PeerLatencyInfo {
+    /// キャプチャバッファ遅延（ms）
+    pub capture_buffer_ms: f32,
+    /// 再生バッファ遅延（ms）
+    pub playback_buffer_ms: f32,
+    /// エンコード遅延（ms）
+    pub encode_ms: f32,
+    /// デコード遅延（ms）
+    pub decode_ms: f32,
+    /// ジッターバッファ遅延（ms）
+    pub jitter_buffer_ms: f32,
+    /// フレームサイズ（サンプル数）
+    pub frame_size: u32,
+    /// サンプルレート（Hz）
+    pub sample_rate: u32,
+    /// コーデック名
+    pub codec: String,
+}
+```
+
+### 10.5 ローカルレイテンシ情報
+
+```rust
+/// ローカルのオーディオ設定から計算されるレイテンシ情報
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LocalLatencyInfo {
+    /// キャプチャバッファ遅延（ms）= frame_size / sample_rate * 1000
+    pub capture_buffer_ms: f32,
+    /// 再生バッファ遅延（ms）= frame_size / sample_rate * 1000
+    pub playback_buffer_ms: f32,
+    /// エンコード遅延（ms）PCM=0, Opus≈2.5
+    pub encode_ms: f32,
+    /// デコード遅延（ms）PCM=0, Opus≈2.5
+    pub decode_ms: f32,
+    /// 現在のジッターバッファ遅延（ms）
+    pub jitter_buffer_ms: f32,
+    /// フレームサイズ（サンプル数）
+    pub frame_size: u32,
+    /// サンプルレート（Hz）
+    pub sample_rate: u32,
+    /// コーデック名
+    pub codec: String,
+}
+
+impl LocalLatencyInfo {
+    /// オーディオ設定からローカルレイテンシ情報を生成
+    pub fn from_audio_config(frame_size: u32, sample_rate: u32, codec: &str) -> Self;
+
+    /// ジッターバッファ遅延を更新
+    pub fn set_jitter_buffer_ms(&mut self, jitter_buffer_ms: f32);
+}
+```
+
+### 10.6 レイテンシ内訳
+
+```rust
+/// 上り（自分 → 相手）レイテンシ内訳
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UpstreamLatency {
+    /// 自分のキャプチャバッファ遅延
+    pub capture_buffer_ms: f32,
+    /// 自分のエンコード遅延
+    pub encode_ms: f32,
+    /// ネットワーク片道遅延（RTT/2）
+    pub network_ms: f32,
+    /// 相手のジッターバッファ遅延
+    pub peer_jitter_buffer_ms: f32,
+    /// 相手のデコード遅延
+    pub peer_decode_ms: f32,
+    /// 相手の再生バッファ遅延
+    pub peer_playback_buffer_ms: f32,
+}
+
+impl UpstreamLatency {
+    /// 合計遅延を計算
+    pub fn total(&self) -> f32;
+}
+
+/// 下り（相手 → 自分）レイテンシ内訳
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DownstreamLatency {
+    /// 相手のキャプチャバッファ遅延
+    pub peer_capture_buffer_ms: f32,
+    /// 相手のエンコード遅延
+    pub peer_encode_ms: f32,
+    /// ネットワーク片道遅延（RTT/2）
+    pub network_ms: f32,
+    /// 自分のジッターバッファ遅延
+    pub jitter_buffer_ms: f32,
+    /// 自分のデコード遅延
+    pub decode_ms: f32,
+    /// 自分の再生バッファ遅延
+    pub playback_buffer_ms: f32,
+}
+
+impl DownstreamLatency {
+    /// 合計遅延を計算
+    pub fn total(&self) -> f32;
+}
+
+/// 完全なレイテンシ内訳
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LatencyBreakdown {
+    /// 上り合計（ms）
+    pub upstream_total_ms: f32,
+    /// 下り合計（ms）
+    pub downstream_total_ms: f32,
+    /// 往復合計（ms）
+    pub roundtrip_total_ms: f32,
+    /// 上り内訳
+    pub upstream: UpstreamLatency,
+    /// 下り内訳
+    pub downstream: DownstreamLatency,
+    /// ネットワーク統計
+    pub network: NetworkLatencyInfo,
+}
+
+impl LatencyBreakdown {
+    /// ローカル情報、ピア情報、RTT、ジッターからレイテンシ内訳を計算
+    pub fn calculate(
+        local: &LocalLatencyInfo,
+        peer: Option<&PeerLatencyInfo>,
+        rtt_ms: f32,
+        jitter_ms: f32,
+    ) -> Self;
+
+    /// ピア情報が利用可能か確認
+    pub fn has_peer_info(&self) -> bool;
+}
+
+/// ネットワークレイテンシ情報
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct NetworkLatencyInfo {
+    /// RTT（ms）
+    pub rtt_ms: f32,
+    /// 片道遅延推定値（RTT/2, ms）
+    pub one_way_ms: f32,
+    /// ジッター（ms）
+    pub jitter_ms: f32,
+    /// パケットロス率（0.0〜1.0）
+    pub packet_loss_rate: f32,
+}
+```
+
+### 10.7 Jitterバッファ遅延取得
+
+```rust
+impl JitterBuffer {
+    /// 現在のバッファ遅延（ms）を取得
+    ///
+    /// current_delay_frames * frame_duration_ms で計算
+    pub fn current_delay_ms(&self) -> f32;
+
+    /// フレーム長（ms）を取得
+    pub fn frame_duration_ms(&self) -> f32;
+}
+```
+
+### 10.8 表示例（CLI）
+
+```
+Peer: Alice (192.168.1.100:5000)
+────────────────────────────────
+  Upstream (You -> Alice): 10.84 ms
+    Capture buffer:     2.67 ms
+    Encode (PCM):       0.00 ms
+    Network:            7.50 ms
+    [Alice] Jitter:     0.00 ms
+    [Alice] Playback:   0.67 ms
+
+  Downstream (Alice -> You): 16.18 ms
+    [Alice] Capture:    0.67 ms
+    [Alice] Encode:     0.00 ms
+    Network:            7.50 ms
+    Jitter buffer:      5.34 ms
+    Playback buffer:    2.67 ms
+
+  Network: RTT 15.00 ms | Jitter 0.82 ms | Loss 0.0%
+────────────────────────────────
+```
+
+### 10.9 注意事項
+
+- **片道遅延の推定**: RTT/2 として計算（対称ネットワーク仮定）
+- **非対称ネットワーク**: 実際の片道遅延と異なる可能性がある
+- **Ping/Pongオーバーヘッド**: 1秒1パケット、約20-30バイト（最小限）
+- **ピア情報がない場合**: 上り/下りの相手側遅延は0msとして表示
+
+---
+
+## 11. 推奨設定 API
 
 ジッター値に基づいて最適なプリセットを推奨する。
 
@@ -618,7 +908,7 @@ match recommendation.quality_level {
 
 ---
 
-## 11. イベント
+## 12. イベント
 
 ```rust
 enum NetworkEvent {
@@ -651,7 +941,7 @@ where
 
 ---
 
-## 12. エラー
+## 13. エラー
 
 ```rust
 enum NetworkError {
@@ -689,7 +979,7 @@ enum ConnectionError {
 
 ---
 
-## 13. スレッドモデル
+## 14. スレッドモデル
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -713,7 +1003,7 @@ enum ConnectionError {
 
 ---
 
-## 14. 使用例
+## 15. 使用例
 
 ```rust
 // 接続設定

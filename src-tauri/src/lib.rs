@@ -14,7 +14,8 @@ use uuid::Uuid;
 
 use jamjam::audio::{list_input_devices, list_output_devices, AudioConfig, AudioDevice};
 use jamjam::network::{
-    RoomInfo, Session, SessionConfig, SignalingClient, SignalingConnection, SignalingMessage,
+    LatencyBreakdown, LocalLatencyInfo, PeerLatencyInfo, RoomInfo, Session, SessionConfig,
+    SignalingClient, SignalingConnection, SignalingMessage,
 };
 
 use audio_service::AudioServiceHandle;
@@ -51,6 +52,8 @@ pub struct AppState {
     // Device polling thread shutdown
     pub device_poll_shutdown: Arc<AtomicBool>,
     pub device_poll_thread: std::sync::Mutex<Option<JoinHandle<()>>>,
+    // Signaling event loop task handle
+    pub signaling_event_loop: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl Default for AppState {
@@ -65,6 +68,7 @@ impl Default for AppState {
             peer_audio_settings: Arc::new(std::sync::Mutex::new(HashMap::new())),
             device_poll_shutdown: Arc::new(AtomicBool::new(false)),
             device_poll_thread: std::sync::Mutex::new(None),
+            signaling_event_loop: Mutex::new(None),
         }
     }
 }
@@ -153,6 +157,79 @@ impl From<RoomInfo> for RoomInfoDto {
             peer_count: r.peer_count,
             max_peers: r.max_peers,
             has_password: r.has_password,
+        }
+    }
+}
+
+/// Latency breakdown DTO for frontend
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LatencyBreakdownDto {
+    pub upstream_total_ms: f32,
+    pub downstream_total_ms: f32,
+    pub roundtrip_total_ms: f32,
+    pub upstream: UpstreamLatencyDto,
+    pub downstream: DownstreamLatencyDto,
+    pub network: NetworkLatencyDto,
+    pub has_peer_info: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpstreamLatencyDto {
+    pub capture_buffer_ms: f32,
+    pub encode_ms: f32,
+    pub network_ms: f32,
+    pub peer_jitter_buffer_ms: f32,
+    pub peer_decode_ms: f32,
+    pub peer_playback_buffer_ms: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DownstreamLatencyDto {
+    pub peer_capture_buffer_ms: f32,
+    pub peer_encode_ms: f32,
+    pub network_ms: f32,
+    pub jitter_buffer_ms: f32,
+    pub decode_ms: f32,
+    pub playback_buffer_ms: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkLatencyDto {
+    pub rtt_ms: f32,
+    pub one_way_ms: f32,
+    pub jitter_ms: f32,
+    pub packet_loss_rate: f32,
+}
+
+impl From<LatencyBreakdown> for LatencyBreakdownDto {
+    fn from(b: LatencyBreakdown) -> Self {
+        Self {
+            upstream_total_ms: b.upstream_total_ms,
+            downstream_total_ms: b.downstream_total_ms,
+            roundtrip_total_ms: b.roundtrip_total_ms,
+            upstream: UpstreamLatencyDto {
+                capture_buffer_ms: b.upstream.capture_buffer_ms,
+                encode_ms: b.upstream.encode_ms,
+                network_ms: b.upstream.network_ms,
+                peer_jitter_buffer_ms: b.upstream.peer_jitter_buffer_ms,
+                peer_decode_ms: b.upstream.peer_decode_ms,
+                peer_playback_buffer_ms: b.upstream.peer_playback_buffer_ms,
+            },
+            downstream: DownstreamLatencyDto {
+                peer_capture_buffer_ms: b.downstream.peer_capture_buffer_ms,
+                peer_encode_ms: b.downstream.peer_encode_ms,
+                network_ms: b.downstream.network_ms,
+                jitter_buffer_ms: b.downstream.jitter_buffer_ms,
+                decode_ms: b.downstream.decode_ms,
+                playback_buffer_ms: b.downstream.playback_buffer_ms,
+            },
+            network: NetworkLatencyDto {
+                rtt_ms: b.network.rtt_ms,
+                one_way_ms: b.network.one_way_ms,
+                jitter_ms: b.network.jitter_ms,
+                packet_loss_rate: b.network.packet_loss_rate,
+            },
+            has_peer_info: b.has_peer_info(),
         }
     }
 }
@@ -415,6 +492,7 @@ async fn cmd_list_rooms(state: State<'_, AppState>) -> Result<Vec<RoomInfoDto>, 
 #[tauri::command]
 async fn cmd_join_room(
     state: State<'_, AppState>,
+    app_handle: tauri::AppHandle,
     room_id: String,
     peer_name: String,
     password: Option<String>,
@@ -529,6 +607,59 @@ async fn cmd_join_room(
         }
     }
 
+    // Start signaling event loop to receive peer events
+    let signaling_conn_clone = state.signaling_conn.clone();
+    let session_clone = state.session.clone();
+    let app_handle_clone = app_handle.clone();
+
+    let handle = tokio::spawn(async move {
+        use tauri::Emitter;
+        loop {
+            let msg = {
+                let mut conn_guard = signaling_conn_clone.lock().await;
+                if let Some(conn) = conn_guard.as_mut() {
+                    conn.recv().await.ok()
+                } else {
+                    None
+                }
+            };
+
+            match msg {
+                Some(SignalingMessage::PeerJoined { peer }) => {
+                    info!("Peer joined: {} ({})", peer.name, peer.id);
+                    if let Some(addr) = peer.public_addr.or(peer.local_addr) {
+                        let mut session_guard = session_clone.lock().await;
+                        if let Some(session) = session_guard.as_mut() {
+                            let _ = session.add_peer(peer.clone(), addr).await;
+                        }
+                    }
+                    let _ = app_handle_clone.emit("peer-joined", &peer);
+                }
+                Some(SignalingMessage::PeerUpdated { peer }) => {
+                    info!("Peer updated: {} ({})", peer.name, peer.id);
+                    if let Some(addr) = peer.public_addr.or(peer.local_addr) {
+                        let mut session_guard = session_clone.lock().await;
+                        if let Some(session) = session_guard.as_mut() {
+                            let _ = session.add_peer(peer.clone(), addr).await;
+                        }
+                    }
+                    let _ = app_handle_clone.emit("peer-updated", &peer);
+                }
+                Some(SignalingMessage::PeerLeft { peer_id }) => {
+                    info!("Peer left: {}", peer_id);
+                    let mut session_guard = session_clone.lock().await;
+                    if let Some(session) = session_guard.as_mut() {
+                        session.remove_peer(peer_id).await;
+                    }
+                    let _ = app_handle_clone.emit("peer-left", peer_id.to_string());
+                }
+                None => break,
+                _ => {}
+            }
+        }
+    });
+    *state.signaling_event_loop.lock().await = Some(handle);
+
     Ok(peers
         .into_iter()
         .map(|p| PeerInfoDto {
@@ -542,6 +673,11 @@ async fn cmd_join_room(
 
 #[tauri::command]
 async fn cmd_leave_room(state: State<'_, AppState>) -> Result<(), String> {
+    // Stop signaling event loop
+    if let Some(handle) = state.signaling_event_loop.lock().await.take() {
+        handle.abort();
+    }
+
     // Leave signaling room
     {
         let mut conn_guard = state.signaling_conn.lock().await;
@@ -622,6 +758,77 @@ async fn cmd_set_peer_muted(
     settings.entry(peer_uuid).or_default().muted = muted;
     info!("Set peer {} muted to {}", peer_id, muted);
     Ok(())
+}
+
+/// Get local latency configuration info
+/// Returns latency info based on current audio configuration
+#[tauri::command]
+async fn cmd_get_local_latency_info(
+    state: State<'_, AppState>,
+) -> Result<LocalLatencyInfoDto, String> {
+    let config_guard = state.config.lock().await;
+
+    let local_info = LocalLatencyInfo::from_audio_config(
+        config_guard.frame_size,
+        config_guard.sample_rate,
+        "pcm", // Default codec for now
+    );
+
+    Ok(LocalLatencyInfoDto {
+        capture_buffer_ms: local_info.capture_buffer_ms,
+        playback_buffer_ms: local_info.playback_buffer_ms,
+        encode_ms: local_info.encode_ms,
+        decode_ms: local_info.decode_ms,
+        jitter_buffer_ms: local_info.jitter_buffer_ms,
+        frame_size: local_info.frame_size,
+        sample_rate: local_info.sample_rate,
+        codec: local_info.codec,
+    })
+}
+
+/// Local latency info DTO
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalLatencyInfoDto {
+    pub capture_buffer_ms: f32,
+    pub playback_buffer_ms: f32,
+    pub encode_ms: f32,
+    pub decode_ms: f32,
+    pub jitter_buffer_ms: f32,
+    pub frame_size: u32,
+    pub sample_rate: u32,
+    pub codec: String,
+}
+
+/// Get latency breakdown for all peers
+/// Note: RTT/jitter values require active P2P connections with LatencyPing/Pong
+#[tauri::command]
+async fn cmd_get_latency_breakdown(
+    state: State<'_, AppState>,
+) -> Result<HashMap<String, LatencyBreakdownDto>, String> {
+    let session_guard = state.session.lock().await;
+    let config_guard = state.config.lock().await;
+
+    // If no session, return empty map
+    if session_guard.is_none() {
+        return Ok(HashMap::new());
+    }
+
+    // Create local latency info from current config
+    let local_info = LocalLatencyInfo::from_audio_config(
+        config_guard.frame_size,
+        config_guard.sample_rate,
+        "pcm", // Default codec for now
+    );
+
+    // For now, return a default breakdown with local info only
+    // Full per-peer latency tracking requires Session refactoring to expose
+    // per-connection RTT/jitter measurements
+    let breakdown = LatencyBreakdown::calculate(&local_info, None, 0.0, 0.0);
+
+    let mut result = HashMap::new();
+    result.insert("local".to_string(), breakdown.into());
+
+    Ok(result)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -714,6 +921,9 @@ pub fn run() {
             cmd_set_peer_volume,
             cmd_set_peer_pan,
             cmd_set_peer_muted,
+            // Latency commands
+            cmd_get_local_latency_info,
+            cmd_get_latency_breakdown,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

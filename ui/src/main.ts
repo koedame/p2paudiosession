@@ -74,6 +74,38 @@ async function init(): Promise<void> {
     }
   );
 
+  // Listen for peer events from signaling
+  await listen<{ id: string; name: string; public_addr: string | null }>(
+    "peer-joined",
+    (event) => {
+      const peer = event.payload;
+      console.log("Peer joined:", peer.name, peer.id);
+      state.peers.push({
+        id: peer.id,
+        name: peer.name,
+        volume: 1.0,
+        muted: false,
+      });
+      updateMixerPeers(state.peers);
+      showToast(`${peer.name} joined`, "info");
+    }
+  );
+
+  await listen<{ id: string; name: string; public_addr: string | null }>(
+    "peer-updated",
+    (event) => {
+      const peer = event.payload;
+      console.log("Peer updated:", peer.name, peer.id);
+    }
+  );
+
+  await listen<string>("peer-left", (event) => {
+    const peerId = event.payload;
+    console.log("Peer left:", peerId);
+    state.peers = state.peers.filter((p) => p.id !== peerId);
+    updateMixerPeers(state.peers);
+  });
+
   // Start status polling
   setInterval(updateStatus, 1000);
 

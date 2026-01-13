@@ -1891,6 +1891,7 @@ dependencies = [
  "futures-util",
  "hkdf",
  "libloading 0.8.9",
+ "parking_lot",
  "rand 0.8.5",
  "ringbuf",
  "rustls",

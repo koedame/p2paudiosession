@@ -736,6 +736,7 @@ dependencies = [
  "hound",
  "libloading",
  "opus",
+ "parking_lot",
  "rand",
  "ringbuf",
  "rustls",

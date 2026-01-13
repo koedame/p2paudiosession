@@ -1,17 +1,25 @@
 //! Connection management for P2P audio streaming
 
+use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use parking_lot::RwLock;
 use tokio::time::interval;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, trace, warn};
 
-use crate::protocol::{Packet, PacketType};
+use crate::protocol::{LatencyInfoMessage, LatencyPing, LatencyPong, Packet, PacketType};
 
 use super::error::NetworkError;
 use super::transport::UdpTransport;
+
+/// Number of RTT samples to keep for averaging
+const RTT_SAMPLE_COUNT: usize = 10;
+
+/// Maximum pending pings before discarding old ones
+const MAX_PENDING_PINGS: usize = 10;
 
 /// Connection statistics
 #[derive(Debug, Clone, Default)]
@@ -20,7 +28,7 @@ pub struct ConnectionStats {
     pub rtt_ms: f32,
     /// Packet loss rate (0.0 - 1.0)
     pub packet_loss_rate: f32,
-    /// Jitter in milliseconds
+    /// Jitter in milliseconds (RTT variation)
     pub jitter_ms: f32,
     /// Total bytes sent
     pub bytes_sent: u64,
@@ -32,6 +40,133 @@ pub struct ConnectionStats {
     pub packets_received: u64,
     /// Connection uptime in seconds
     pub uptime_seconds: u64,
+}
+
+/// RTT measurement state
+#[derive(Debug)]
+struct RttMeasurement {
+    /// Current smoothed RTT estimate (ms)
+    rtt_ms: f32,
+    /// RTT jitter / variation (ms)
+    jitter_ms: f32,
+    /// Pending ping sequences with sent timestamps (monotonic instant)
+    pending_pings: HashMap<u32, Instant>,
+    /// Recent RTT samples for averaging
+    rtt_samples: VecDeque<f32>,
+    /// Next ping sequence number
+    next_ping_seq: u32,
+    /// Monotonic time reference for timestamps
+    time_reference: Instant,
+}
+
+impl Default for RttMeasurement {
+    fn default() -> Self {
+        Self {
+            rtt_ms: 0.0,
+            jitter_ms: 0.0,
+            pending_pings: HashMap::new(),
+            rtt_samples: VecDeque::with_capacity(RTT_SAMPLE_COUNT),
+            next_ping_seq: 0,
+            time_reference: Instant::now(),
+        }
+    }
+}
+
+impl RttMeasurement {
+    /// Get current time in microseconds since reference
+    fn now_us(&self) -> u64 {
+        self.time_reference.elapsed().as_micros() as u64
+    }
+
+    /// Create a ping message and record the send time
+    fn create_ping(&mut self) -> LatencyPing {
+        let seq = self.next_ping_seq;
+        self.next_ping_seq = self.next_ping_seq.wrapping_add(1);
+
+        // Clean up old pending pings if too many
+        if self.pending_pings.len() >= MAX_PENDING_PINGS {
+            // Remove the oldest entry
+            if let Some(&oldest_seq) = self.pending_pings.keys().min() {
+                self.pending_pings.remove(&oldest_seq);
+            }
+        }
+
+        self.pending_pings.insert(seq, Instant::now());
+
+        LatencyPing {
+            sent_time_us: self.now_us(),
+            ping_sequence: seq,
+        }
+    }
+
+    /// Process a pong response and update RTT statistics
+    fn process_pong(&mut self, pong: &LatencyPong) {
+        if let Some(sent_time) = self.pending_pings.remove(&pong.ping_sequence) {
+            let rtt = sent_time.elapsed().as_secs_f32() * 1000.0; // Convert to ms
+
+            // Update RTT samples
+            if self.rtt_samples.len() >= RTT_SAMPLE_COUNT {
+                self.rtt_samples.pop_front();
+            }
+            self.rtt_samples.push_back(rtt);
+
+            // Calculate smoothed RTT (exponential moving average)
+            let alpha = 0.125; // Standard TCP-like smoothing factor
+            if self.rtt_ms == 0.0 {
+                self.rtt_ms = rtt;
+            } else {
+                self.rtt_ms = (1.0 - alpha) * self.rtt_ms + alpha * rtt;
+            }
+
+            // Calculate jitter (RTT variation)
+            let beta = 0.25;
+            let diff = (rtt - self.rtt_ms).abs();
+            self.jitter_ms = (1.0 - beta) * self.jitter_ms + beta * diff;
+
+            trace!(
+                "RTT updated: rtt={:.2}ms, jitter={:.2}ms (sample={:.2}ms)",
+                self.rtt_ms,
+                self.jitter_ms,
+                rtt
+            );
+        }
+    }
+}
+
+/// Peer latency information received from remote peer
+#[derive(Debug, Clone, Default)]
+pub struct PeerLatencyInfo {
+    /// Peer's capture buffer latency (ms)
+    pub capture_buffer_ms: f32,
+    /// Peer's playback buffer latency (ms)
+    pub playback_buffer_ms: f32,
+    /// Peer's encode latency (ms)
+    pub encode_ms: f32,
+    /// Peer's decode latency (ms)
+    pub decode_ms: f32,
+    /// Peer's current jitter buffer delay (ms)
+    pub jitter_buffer_ms: f32,
+    /// Peer's frame size (samples)
+    pub frame_size: u32,
+    /// Peer's sample rate (Hz)
+    pub sample_rate: u32,
+    /// Peer's codec name
+    pub codec: String,
+}
+
+impl From<LatencyInfoMessage> for PeerLatencyInfo {
+    fn from(msg: LatencyInfoMessage) -> Self {
+        Self {
+            capture_buffer_ms: msg.capture_buffer_ms,
+            playback_buffer_ms: msg.playback_buffer_ms,
+            encode_ms: msg.encode_ms,
+            decode_ms: msg.decode_ms,
+            jitter_buffer_ms: msg.jitter_buffer_ms,
+            frame_size: msg.frame_size,
+            sample_rate: msg.sample_rate,
+            codec: msg.codec,
+        }
+    }
 }
 
 /// Connection state
@@ -108,6 +243,9 @@ impl ConnectionState {
 /// Callback for received audio data
 pub type AudioCallback = Box<dyn Fn(&[u8], u32) + Send + Sync + 'static>;
 
+/// Callback for received peer latency info
+pub type LatencyInfoCallback = Box<dyn Fn(PeerLatencyInfo) + Send + Sync + 'static>;
+
 /// A P2P connection to a remote peer
 pub struct Connection {
     transport: Arc<UdpTransport>,
@@ -124,6 +262,14 @@ pub struct Connection {
     audio_callback: Option<Arc<AudioCallback>>,
     receive_handle: Option<tokio::task::JoinHandle<()>>,
     keepalive_handle: Option<tokio::task::JoinHandle<()>>,
+    /// RTT measurement state
+    rtt_measurement: Arc<RwLock<RttMeasurement>>,
+    /// Peer latency information (received from remote peer)
+    peer_latency_info: Arc<RwLock<Option<PeerLatencyInfo>>>,
+    /// Callback for when peer latency info is received
+    latency_info_callback: Option<Arc<LatencyInfoCallback>>,
+    /// Connection start time for uptime tracking
+    connection_start: Arc<std::sync::Mutex<Option<Instant>>>,
 }
 
 impl Connection {
@@ -145,6 +291,10 @@ impl Connection {
             audio_callback: None,
             receive_handle: None,
             keepalive_handle: None,
+            rtt_measurement: Arc::new(RwLock::new(RttMeasurement::default())),
+            peer_latency_info: Arc::new(RwLock::new(None)),
+            latency_info_callback: None,
+            connection_start: Arc::new(std::sync::Mutex::new(None)),
         })
     }
 
@@ -166,6 +316,11 @@ impl Connection {
         // Send initial keep-alive to establish connection
         let packet = Packet::keep_alive(self.next_sequence());
         self.transport.send_to(&packet, remote_addr).await?;
+
+        // Record connection start time
+        if let Ok(mut start) = self.connection_start.lock() {
+            *start = Some(Instant::now());
+        }
 
         self.set_state(ConnectionState::Connected);
         self.start_receive_loop();
@@ -235,6 +390,42 @@ impl Connection {
         self.audio_callback = Some(Arc::new(Box::new(callback)));
     }
 
+    /// Set callback for received peer latency info
+    pub fn set_latency_info_callback<F>(&mut self, callback: F)
+    where
+        F: Fn(PeerLatencyInfo) + Send + Sync + 'static,
+    {
+        self.latency_info_callback = Some(Arc::new(Box::new(callback)));
+    }
+
+    /// Send latency info to the remote peer
+    pub async fn send_latency_info(&self, info: &LatencyInfoMessage) -> Result<(), NetworkError> {
+        if !self.state().can_transmit() {
+            return Err(NetworkError::NotConnected);
+        }
+
+        let packet = Packet::latency_info(self.next_sequence(), info);
+        self.transport.send_to(&packet, self.remote_addr).await?;
+
+        debug!("Sent latency info to {}", self.remote_addr);
+        Ok(())
+    }
+
+    /// Get the current RTT estimate in milliseconds
+    pub fn rtt_ms(&self) -> f32 {
+        self.rtt_measurement.read().rtt_ms
+    }
+
+    /// Get the current jitter estimate in milliseconds
+    pub fn jitter_ms(&self) -> f32 {
+        self.rtt_measurement.read().jitter_ms
+    }
+
+    /// Get the peer's latency information (if received)
+    pub fn peer_latency_info(&self) -> Option<PeerLatencyInfo> {
+        self.peer_latency_info.read().clone()
+    }
+
     /// Send audio data to the remote peer
     pub async fn send_audio(&self, data: &[f32], timestamp: u32) -> Result<(), NetworkError> {
         if !self.state().can_transmit() {
@@ -258,15 +449,23 @@ impl Connection {
 
     /// Get connection statistics
     pub fn stats(&self) -> ConnectionStats {
+        let rtt = self.rtt_measurement.read();
+        let uptime = self
+            .connection_start
+            .lock()
+            .ok()
+            .and_then(|start| start.map(|s| s.elapsed().as_secs()))
+            .unwrap_or(0);
+
         ConnectionStats {
-            rtt_ms: 0.0,           // TODO: Implement RTT measurement
+            rtt_ms: rtt.rtt_ms,
             packet_loss_rate: 0.0, // TODO: Implement packet loss tracking
-            jitter_ms: 0.0,        // TODO: Implement jitter measurement
+            jitter_ms: rtt.jitter_ms,
             bytes_sent: self.bytes_sent.load(Ordering::Relaxed),
             bytes_received: self.bytes_received.load(Ordering::Relaxed),
             packets_sent: self.packets_sent.load(Ordering::Relaxed),
             packets_received: self.packets_received.load(Ordering::Relaxed),
-            uptime_seconds: 0, // TODO: Track connection start time
+            uptime_seconds: uptime,
         }
     }
 
@@ -281,6 +480,11 @@ impl Connection {
         let packets_received = self.packets_received.clone();
         let bytes_received = self.bytes_received.clone();
         let audio_callback = self.audio_callback.clone();
+        let rtt_measurement = self.rtt_measurement.clone();
+        let peer_latency_info = self.peer_latency_info.clone();
+        let latency_info_callback = self.latency_info_callback.clone();
+        let remote_addr = self.remote_addr;
+        let sequence = Arc::new(AtomicU32::new(1_000_000)); // Separate sequence for pong responses
 
         let handle = tokio::spawn(async move {
             let (mut rx, _recv_handle) = transport.clone().start_receive_loop();
@@ -304,6 +508,45 @@ impl Connection {
                     PacketType::KeepAlive => {
                         debug!("Received keep-alive");
                     }
+                    PacketType::LatencyPing => {
+                        // Respond with pong
+                        if let Some(ping) = LatencyPing::from_bytes(&packet.payload) {
+                            let pong = LatencyPong {
+                                original_sent_time_us: ping.sent_time_us,
+                                ping_sequence: ping.ping_sequence,
+                            };
+                            let pong_packet = Packet::latency_pong(
+                                sequence.fetch_add(1, Ordering::Relaxed),
+                                &pong,
+                            );
+                            if let Err(e) = transport.send_to(&pong_packet, remote_addr).await {
+                                warn!("Failed to send latency pong: {}", e);
+                            }
+                            trace!("Responded to latency ping seq={}", ping.ping_sequence);
+                        }
+                    }
+                    PacketType::LatencyPong => {
+                        // Update RTT measurement
+                        if let Some(pong) = LatencyPong::from_bytes(&packet.payload) {
+                            rtt_measurement.write().process_pong(&pong);
+                        }
+                    }
+                    PacketType::LatencyInfo => {
+                        // Store peer's latency info
+                        if let Some(info) = LatencyInfoMessage::from_bytes(&packet.payload) {
+                            let peer_info: PeerLatencyInfo = info.into();
+                            debug!(
+                                "Received peer latency info: capture={:.2}ms, playback={:.2}ms, jitter={:.2}ms",
+                                peer_info.capture_buffer_ms,
+                                peer_info.playback_buffer_ms,
+                                peer_info.jitter_buffer_ms
+                            );
+                            if let Some(ref callback) = latency_info_callback {
+                                callback(peer_info.clone());
+                            }
+                            *peer_latency_info.write() = Some(peer_info);
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -317,6 +560,7 @@ impl Connection {
         let state = self.state.clone();
         let remote_addr = self.remote_addr;
         let sequence = AtomicU32::new(0);
+        let rtt_measurement = self.rtt_measurement.clone();
 
         let handle = tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(1));
@@ -329,10 +573,20 @@ impl Connection {
                     break;
                 }
 
+                // Send keep-alive
                 let packet = Packet::keep_alive(sequence.fetch_add(1, Ordering::Relaxed));
                 if let Err(e) = transport.send_to(&packet, remote_addr).await {
                     warn!("Failed to send keep-alive: {}", e);
                 }
+
+                // Send latency ping for RTT measurement
+                let ping = rtt_measurement.write().create_ping();
+                let ping_packet =
+                    Packet::latency_ping(sequence.fetch_add(1, Ordering::Relaxed), &ping);
+                if let Err(e) = transport.send_to(&ping_packet, remote_addr).await {
+                    warn!("Failed to send latency ping: {}", e);
+                }
+                trace!("Sent latency ping seq={}", ping.ping_sequence);
             }
         });
 

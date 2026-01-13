@@ -4,4 +4,6 @@
 
 mod packet;
 
-pub use packet::{Packet, PacketType, HEADER_SIZE, PROTOCOL_VERSION};
+pub use packet::{
+    LatencyInfoMessage, LatencyPing, LatencyPong, Packet, PacketType, HEADER_SIZE, PROTOCOL_VERSION,
+};
