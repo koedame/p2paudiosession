@@ -16,7 +16,6 @@ use tracing::{error, info, warn};
 use jamjam::audio::{AudioConfig, AudioEngine, AudioEvent, DeviceId};
 
 /// Commands sent to the audio thread
-#[derive(Debug)]
 pub enum AudioCommand {
     /// Start audio capture and playback
     Start {
@@ -34,6 +33,10 @@ pub enum AudioCommand {
     SetInputDevice(Option<String>),
     /// Switch output device while running
     SetOutputDevice(Option<String>),
+    /// Set capture sender for sending audio to network
+    SetCaptureSender(tokio::sync::mpsc::Sender<(Vec<f32>, u32)>),
+    /// Clear capture sender
+    ClearCaptureSender,
     /// Shutdown the audio thread
     Shutdown,
 }
@@ -67,6 +70,8 @@ pub struct AudioServiceHandle {
     local_monitoring: Arc<AtomicBool>,
     /// Receiver for device events (to be polled by main thread)
     device_event_rx: mpsc::Receiver<DeviceEvent>,
+    /// Sender for captured audio to network
+    capture_sender: Option<tokio::sync::mpsc::Sender<(Vec<f32>, u32)>>,
 }
 
 impl AudioServiceHandle {
@@ -97,7 +102,20 @@ impl AudioServiceHandle {
             running,
             local_monitoring,
             device_event_rx,
+            capture_sender: None,
         }
+    }
+
+    /// Set capture sender for sending audio to network
+    pub fn set_capture_sender(&mut self, sender: tokio::sync::mpsc::Sender<(Vec<f32>, u32)>) {
+        self.capture_sender = Some(sender.clone());
+        let _ = self.cmd_tx.send(AudioCommand::SetCaptureSender(sender));
+    }
+
+    /// Clear capture sender
+    pub fn clear_capture_sender(&mut self) {
+        self.capture_sender = None;
+        let _ = self.cmd_tx.send(AudioCommand::ClearCaptureSender);
     }
 
     /// Start audio with the given devices and config
@@ -218,12 +236,13 @@ impl Drop for AudioServiceHandle {
     }
 }
 
-/// Create a capture callback that handles local monitoring
+/// Create a capture callback that handles local monitoring and network sending
 fn create_capture_callback(
     playback_producer: Option<jamjam::audio::SharedPlaybackProducer>,
     local_monitoring: Arc<AtomicBool>,
+    capture_sender: Option<tokio::sync::mpsc::Sender<(Vec<f32>, u32)>>,
 ) -> impl Fn(&[f32], u64) + Send + Sync + 'static {
-    move |samples: &[f32], _timestamp: u64| {
+    move |samples: &[f32], timestamp: u64| {
         // If local monitoring is enabled, write to playback buffer
         if local_monitoring.load(Ordering::SeqCst) {
             if let Some(ref producer) = playback_producer {
@@ -234,6 +253,11 @@ fn create_capture_callback(
                     }
                 }
             }
+        }
+
+        // Send captured audio to network
+        if let Some(ref sender) = capture_sender {
+            let _ = sender.try_send((samples.to_vec(), timestamp as u32));
         }
     }
 }
@@ -250,6 +274,7 @@ fn audio_thread_main(
 
     let mut engine: Option<AudioEngine> = None;
     let mut audio_event_rx: Option<mpsc::Receiver<AudioEvent>> = None;
+    let mut capture_sender: Option<tokio::sync::mpsc::Sender<(Vec<f32>, u32)>> = None;
 
     loop {
         // Non-blocking check for audio events (device disconnection)
@@ -260,8 +285,11 @@ fn audio_thread_main(
                         warn!("Input device disconnected, attempting fallback to default");
                         if let Some(ref mut eng) = engine {
                             let playback_producer = eng.playback_producer();
-                            let callback =
-                                create_capture_callback(playback_producer, local_monitoring.clone());
+                            let callback = create_capture_callback(
+                                playback_producer,
+                                local_monitoring.clone(),
+                                capture_sender.clone(),
+                            );
 
                             match eng.set_input_device(None, callback) {
                                 Ok(_) => {
@@ -319,7 +347,6 @@ fn audio_thread_main(
 
                 // Stop existing engine if any
                 engine = None;
-                audio_event_rx = None;
 
                 let mut new_engine = AudioEngine::new(config);
 
@@ -338,8 +365,11 @@ fn audio_thread_main(
 
                 // Get shared playback producer and local monitoring flag
                 let playback_producer = new_engine.playback_producer();
-                let capture_callback =
-                    create_capture_callback(playback_producer, local_monitoring.clone());
+                let capture_callback = create_capture_callback(
+                    playback_producer,
+                    local_monitoring.clone(),
+                    capture_sender.clone(),
+                );
 
                 // Start capture with callback that handles local monitoring
                 let input_device_id = input_device.map(DeviceId);
@@ -389,8 +419,11 @@ fn audio_thread_main(
                 info!("Switching input device to: {:?}", device_id);
                 if let Some(ref mut eng) = engine {
                     let playback_producer = eng.playback_producer();
-                    let callback =
-                        create_capture_callback(playback_producer, local_monitoring.clone());
+                    let callback = create_capture_callback(
+                        playback_producer,
+                        local_monitoring.clone(),
+                        capture_sender.clone(),
+                    );
                     let device_id_ref = device_id.map(DeviceId);
 
                     match eng.set_input_device(device_id_ref.as_ref(), callback) {
@@ -406,6 +439,16 @@ fn audio_thread_main(
                 } else {
                     let _ = resp_tx.send(AudioResponse::Error("Audio not running".to_string()));
                 }
+            }
+
+            Ok(AudioCommand::SetCaptureSender(sender)) => {
+                info!("Setting capture sender for network audio");
+                capture_sender = Some(sender);
+            }
+
+            Ok(AudioCommand::ClearCaptureSender) => {
+                info!("Clearing capture sender");
+                capture_sender = None;
             }
 
             Ok(AudioCommand::SetOutputDevice(device_id)) => {

@@ -88,6 +88,12 @@ hound = "3.5"  # WAV file handling for audio quality tests
 lto = true
 codegen-units = 1
 
+[workspace.lints.rust]
+warnings = "deny"
+
+[workspace.lints.clippy]
+all = "deny"
+
 [[bin]]
 name = "jamjam"
 path = "src/main.rs"

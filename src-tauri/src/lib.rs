@@ -14,8 +14,8 @@ use uuid::Uuid;
 
 use jamjam::audio::{list_input_devices, list_output_devices, AudioConfig, AudioDevice};
 use jamjam::network::{
-    LatencyBreakdown, LocalLatencyInfo, PeerLatencyInfo, RoomInfo, Session, SessionConfig,
-    SignalingClient, SignalingConnection, SignalingMessage,
+    LatencyBreakdown, LocalLatencyInfo, RoomInfo, Session, SessionConfig, SignalingClient,
+    SignalingConnection, SignalingMessage,
 };
 
 use audio_service::AudioServiceHandle;
@@ -54,6 +54,8 @@ pub struct AppState {
     pub device_poll_thread: std::sync::Mutex<Option<JoinHandle<()>>>,
     // Signaling event loop task handle
     pub signaling_event_loop: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    // Audio send task handle
+    pub audio_send_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl Default for AppState {
@@ -69,6 +71,7 @@ impl Default for AppState {
             device_poll_shutdown: Arc::new(AtomicBool::new(false)),
             device_poll_thread: std::sync::Mutex::new(None),
             signaling_event_loop: Mutex::new(None),
+            audio_send_task: Mutex::new(None),
         }
     }
 }
@@ -607,6 +610,26 @@ async fn cmd_join_room(
         }
     }
 
+    // Create capture-to-session channel for sending audio to peers
+    let (tx_capture, mut rx_capture) = tokio::sync::mpsc::channel::<(Vec<f32>, u32)>(64);
+
+    // Set capture sender in AudioService
+    if let Ok(mut service) = state.audio_service.lock() {
+        service.set_capture_sender(tx_capture);
+    }
+
+    // Spawn audio send task
+    let session_for_send = state.session.clone();
+    let audio_send_handle = tokio::spawn(async move {
+        while let Some((samples, timestamp)) = rx_capture.recv().await {
+            let session_guard = session_for_send.lock().await;
+            if let Some(ref session) = *session_guard {
+                let _ = session.broadcast_audio(&samples, timestamp).await;
+            }
+        }
+    });
+    *state.audio_send_task.lock().await = Some(audio_send_handle);
+
     // Start signaling event loop to receive peer events
     let signaling_conn_clone = state.signaling_conn.clone();
     let session_clone = state.session.clone();
@@ -676,6 +699,16 @@ async fn cmd_leave_room(state: State<'_, AppState>) -> Result<(), String> {
     // Stop signaling event loop
     if let Some(handle) = state.signaling_event_loop.lock().await.take() {
         handle.abort();
+    }
+
+    // Stop audio send task
+    if let Some(handle) = state.audio_send_task.lock().await.take() {
+        handle.abort();
+    }
+
+    // Clear capture sender in AudioService
+    if let Ok(mut service) = state.audio_service.lock() {
+        service.clear_capture_sender();
     }
 
     // Leave signaling room

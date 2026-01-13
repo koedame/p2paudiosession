@@ -32,6 +32,17 @@ jamjam = { path = ".." }
 crossbeam-channel = "0.5"
 ringbuf = "0.4"
 
+[workspace]
+
+[workspace.lints.rust]
+warnings = "deny"
+
+[workspace.lints.clippy]
+all = "deny"
+
+[lints]
+workspace = true
+
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
