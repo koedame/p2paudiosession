@@ -5,6 +5,9 @@ edition = "2021"
 publish = false
 description = "End-to-end test infrastructure for jamjam"
 
+# Keep this package independent from root workspace
+[workspace]
+
 [dependencies]
 # Core jamjam library
 jamjam = { path = "../.." }
