@@ -7,7 +7,7 @@ use clap::{Parser, Subcommand};
 use tracing::{info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 
-use jamjam::audio::{list_input_devices, list_output_devices, AudioConfig, AudioEngine};
+use jamjam::audio::{list_input_devices, list_output_devices, AudioConfig, AudioEngine, DeviceId};
 use jamjam::network::{Connection, SignalingClient, SignalingMessage};
 
 #[derive(Parser)]
@@ -44,6 +44,14 @@ enum Commands {
         /// Frame size in samples
         #[arg(long, default_value = "128")]
         frame_size: u32,
+
+        /// Input device name (use 'devices list' to see available devices)
+        #[arg(long)]
+        input_device: Option<String>,
+
+        /// Output device name (use 'devices list' to see available devices)
+        #[arg(long)]
+        output_device: Option<String>,
     },
 
     /// Join a session
@@ -58,6 +66,14 @@ enum Commands {
         /// Frame size in samples
         #[arg(long, default_value = "128")]
         frame_size: u32,
+
+        /// Input device name (use 'devices list' to see available devices)
+        #[arg(long)]
+        input_device: Option<String>,
+
+        /// Output device name (use 'devices list' to see available devices)
+        #[arg(long)]
+        output_device: Option<String>,
     },
 
     /// List rooms on signaling server
@@ -88,6 +104,14 @@ enum Commands {
         /// Frame size in samples
         #[arg(long, default_value = "128")]
         frame_size: u32,
+
+        /// Input device name (use 'devices list' to see available devices)
+        #[arg(long)]
+        input_device: Option<String>,
+
+        /// Output device name (use 'devices list' to see available devices)
+        #[arg(long)]
+        output_device: Option<String>,
     },
 }
 
@@ -136,7 +160,13 @@ fn list_devices() {
     }
 }
 
-async fn run_host(port: u16, sample_rate: u32, frame_size: u32) -> Result<()> {
+async fn run_host(
+    port: u16,
+    sample_rate: u32,
+    frame_size: u32,
+    input_device: Option<String>,
+    output_device: Option<String>,
+) -> Result<()> {
     let config = AudioConfig {
         sample_rate,
         channels: 1,
@@ -151,8 +181,11 @@ async fn run_host(port: u16, sample_rate: u32, frame_size: u32) -> Result<()> {
 
     let mut audio_engine = AudioEngine::new(config.clone());
 
+    let input_id = input_device.map(DeviceId);
+    let output_id = output_device.map(DeviceId);
+
     // Start capture (for now just log, full implementation would track connected peers)
-    audio_engine.start_capture(None, move |samples, timestamp| {
+    audio_engine.start_capture(input_id.as_ref(), move |samples, timestamp| {
         if timestamp % 48000 == 0 {
             tracing::debug!(
                 "Captured {} samples at timestamp {}",
@@ -162,7 +195,7 @@ async fn run_host(port: u16, sample_rate: u32, frame_size: u32) -> Result<()> {
         }
     })?;
 
-    audio_engine.start_playback(None)?;
+    audio_engine.start_playback(output_id.as_ref())?;
 
     println!("\nHost started. Listening on port {}.", port);
     println!("Press Ctrl+C to stop.\n");
@@ -184,7 +217,13 @@ async fn run_host(port: u16, sample_rate: u32, frame_size: u32) -> Result<()> {
     Ok(())
 }
 
-async fn run_join(address: String, sample_rate: u32, frame_size: u32) -> Result<()> {
+async fn run_join(
+    address: String,
+    sample_rate: u32,
+    frame_size: u32,
+    input_device: Option<String>,
+    output_device: Option<String>,
+) -> Result<()> {
     let config = AudioConfig {
         sample_rate,
         channels: 1,
@@ -199,6 +238,9 @@ async fn run_join(address: String, sample_rate: u32, frame_size: u32) -> Result<
 
     let mut audio_engine = AudioEngine::new(config.clone());
 
+    let input_id = input_device.map(DeviceId);
+    let output_id = output_device.map(DeviceId);
+
     // Create channels for audio data
     // tx_capture: capture callback -> send task
     let (tx_capture, mut rx_capture) = tokio::sync::mpsc::channel::<(Vec<f32>, u32)>(64);
@@ -206,11 +248,11 @@ async fn run_join(address: String, sample_rate: u32, frame_size: u32) -> Result<
     let (tx_playback, mut rx_playback) = tokio::sync::mpsc::channel::<Vec<f32>>(64);
 
     // Start audio capture
-    audio_engine.start_capture(None, move |samples, timestamp| {
+    audio_engine.start_capture(input_id.as_ref(), move |samples, timestamp| {
         let _ = tx_capture.try_send((samples.to_vec(), timestamp as u32));
     })?;
 
-    audio_engine.start_playback(None)?;
+    audio_engine.start_playback(output_id.as_ref())?;
 
     // Set up audio receive callback BEFORE connect
     // (connect starts receive loop which clones the callback)
@@ -336,6 +378,8 @@ async fn run_join_room(
     peer_name: String,
     sample_rate: u32,
     frame_size: u32,
+    input_device: Option<String>,
+    output_device: Option<String>,
 ) -> Result<()> {
     let config = AudioConfig {
         sample_rate,
@@ -403,16 +447,19 @@ async fn run_join_room(
 
         let mut audio_engine = AudioEngine::new(config.clone());
 
+        let input_id = input_device.map(DeviceId);
+        let output_id = output_device.map(DeviceId);
+
         // Create channels for audio data
         let (tx_capture, mut rx_capture) = tokio::sync::mpsc::channel::<(Vec<f32>, u32)>(64);
         let (tx_playback, mut rx_playback) = tokio::sync::mpsc::channel::<Vec<f32>>(64);
 
         // Start audio capture
-        audio_engine.start_capture(None, move |samples, timestamp| {
+        audio_engine.start_capture(input_id.as_ref(), move |samples, timestamp| {
             let _ = tx_capture.try_send((samples.to_vec(), timestamp as u32));
         })?;
 
-        audio_engine.start_playback(None)?;
+        audio_engine.start_playback(output_id.as_ref())?;
 
         // Set up audio receive callback BEFORE connect
         // (connect starts receive loop which clones the callback)
@@ -513,15 +560,26 @@ async fn main() -> Result<()> {
             port,
             sample_rate,
             frame_size,
+            input_device,
+            output_device,
         } => {
-            run_host(port, sample_rate, frame_size).await?;
+            run_host(port, sample_rate, frame_size, input_device, output_device).await?;
         }
         Commands::Join {
             address,
             sample_rate,
             frame_size,
+            input_device,
+            output_device,
         } => {
-            run_join(address, sample_rate, frame_size).await?;
+            run_join(
+                address,
+                sample_rate,
+                frame_size,
+                input_device,
+                output_device,
+            )
+            .await?;
         }
         Commands::Rooms { server } => {
             run_rooms(server).await?;
@@ -532,8 +590,19 @@ async fn main() -> Result<()> {
             name,
             sample_rate,
             frame_size,
+            input_device,
+            output_device,
         } => {
-            run_join_room(server, room, name, sample_rate, frame_size).await?;
+            run_join_room(
+                server,
+                room,
+                name,
+                sample_rate,
+                frame_size,
+                input_device,
+                output_device,
+            )
+            .await?;
         }
     }
 
