@@ -39,7 +39,11 @@
     "localMonitoring": "自分の声を聞く",
     "start": "オーディオ開始",
     "stop": "オーディオ停止",
-    "default": "デフォルト"
+    "default": "デフォルト",
+    "inputDeviceChanged": "入力デバイスを変更しました",
+    "outputDeviceChanged": "出力デバイスを変更しました",
+    "deviceDisconnectedFallback": "{{deviceType}}が切断されました。デフォルトデバイスに切り替えました。",
+    "deviceDisconnectedFailed": "{{deviceType}}が切断されました。デフォルトデバイスへの切り替えに失敗しました。"
   },
   "mixer": {
     "title": "ミキサー",
@@ -101,7 +105,9 @@
     "deviceNotFound": "デバイスが見つかりません",
     "signalingConnectFailed": "サーバーへの接続に失敗しました",
     "roomJoinFailed": "ルームへの参加に失敗しました",
-    "roomListFailed": "ルーム一覧の取得に失敗しました"
+    "roomListFailed": "ルーム一覧の取得に失敗しました",
+    "inputDeviceSwitchFailed": "入力デバイスの切り替えに失敗しました",
+    "outputDeviceSwitchFailed": "出力デバイスの切り替えに失敗しました"
   },
   "common": {
     "ok": "OK",

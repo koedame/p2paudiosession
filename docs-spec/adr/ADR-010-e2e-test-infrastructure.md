@@ -1,3 +1,8 @@
+---
+sidebar_label: ADR-010 E2E Test Infrastructure
+sidebar_position: 10
+---
+
 # ADR-010: E2E Test Infrastructure
 
 ## Status

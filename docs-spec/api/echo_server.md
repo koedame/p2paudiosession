@@ -1,3 +1,8 @@
+---
+sidebar_label: Echo Server
+sidebar_position: 5
+---
+
 # Echo Server API Specification
 
 ## Overview

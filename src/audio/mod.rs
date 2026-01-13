@@ -21,7 +21,7 @@ pub use effects::{
     LowPassFilter, NoiseGate,
 };
 pub use engine::{
-    AudioBuffer, AudioConfig, AudioEngine, BitDepth, CaptureConfig, PlaybackConfig,
+    AudioBuffer, AudioConfig, AudioEngine, AudioEvent, BitDepth, CaptureConfig, PlaybackConfig,
     SharedPlaybackProducer,
 };
 pub use error::AudioError;

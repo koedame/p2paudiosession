@@ -39,7 +39,11 @@
     "localMonitoring": "Hear Yourself",
     "start": "Start Audio",
     "stop": "Stop Audio",
-    "default": "Default"
+    "default": "Default",
+    "inputDeviceChanged": "Input device changed",
+    "outputDeviceChanged": "Output device changed",
+    "deviceDisconnectedFallback": "{{deviceType}} disconnected. Switched to default device.",
+    "deviceDisconnectedFailed": "{{deviceType}} disconnected. Failed to switch to default device."
   },
   "mixer": {
     "title": "Mixer",
@@ -101,7 +105,9 @@
     "deviceNotFound": "Device not found",
     "signalingConnectFailed": "Failed to connect to server",
     "roomJoinFailed": "Failed to join room",
-    "roomListFailed": "Failed to get room list"
+    "roomListFailed": "Failed to get room list",
+    "inputDeviceSwitchFailed": "Failed to switch input device",
+    "outputDeviceSwitchFailed": "Failed to switch output device"
   },
   "common": {
     "ok": "OK",

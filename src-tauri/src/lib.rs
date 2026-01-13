@@ -4,8 +4,10 @@ mod audio_service;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tauri::State;
+use std::thread::JoinHandle;
+use tauri::{Manager, State};
 use tokio::sync::Mutex;
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -46,6 +48,9 @@ pub struct AppState {
     pub my_peer_id: Arc<Mutex<Option<Uuid>>>,
     // Per-peer audio settings
     pub peer_audio_settings: Arc<std::sync::Mutex<HashMap<Uuid, PeerAudioSettings>>>,
+    // Device polling thread shutdown
+    pub device_poll_shutdown: Arc<AtomicBool>,
+    pub device_poll_thread: std::sync::Mutex<Option<JoinHandle<()>>>,
 }
 
 impl Default for AppState {
@@ -58,6 +63,24 @@ impl Default for AppState {
             current_room_id: Arc::new(Mutex::new(None)),
             my_peer_id: Arc::new(Mutex::new(None)),
             peer_audio_settings: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            device_poll_shutdown: Arc::new(AtomicBool::new(false)),
+            device_poll_thread: std::sync::Mutex::new(None),
+        }
+    }
+}
+
+impl Drop for AppState {
+    fn drop(&mut self) {
+        // Signal device polling thread to stop
+        self.device_poll_shutdown.store(true, Ordering::SeqCst);
+
+        // Wait for thread to finish
+        if let Ok(mut handle) = self.device_poll_thread.lock() {
+            if let Some(h) = handle.take() {
+                info!("Waiting for device polling thread to stop");
+                let _ = h.join();
+                info!("Device polling thread stopped");
+            }
         }
     }
 }
@@ -194,6 +217,28 @@ async fn cmd_set_local_monitoring(
     let audio_service = state.audio_service.lock().map_err(|e| e.to_string())?;
     audio_service.set_local_monitoring(enabled)?;
     info!("Local monitoring: {}", enabled);
+    Ok(())
+}
+
+#[tauri::command]
+async fn cmd_set_input_device(
+    state: State<'_, AppState>,
+    device_id: Option<String>,
+) -> Result<(), String> {
+    let audio_service = state.audio_service.lock().map_err(|e| e.to_string())?;
+    audio_service.set_input_device(device_id)?;
+    info!("Input device changed");
+    Ok(())
+}
+
+#[tauri::command]
+async fn cmd_set_output_device(
+    state: State<'_, AppState>,
+    device_id: Option<String>,
+) -> Result<(), String> {
+    let audio_service = state.audio_service.lock().map_err(|e| e.to_string())?;
+    audio_service.set_output_device(device_id)?;
+    info!("Output device changed");
     Ok(())
 }
 
@@ -577,6 +622,62 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(AppState::default())
+        .setup(|app| {
+            // Auto-start audio on app launch
+            let state = app.state::<AppState>();
+            let config = AudioConfig::default();
+
+            // Start audio with default devices
+            match state.audio_service.lock() {
+                Ok(audio_service) => {
+                    match audio_service.start(None, None, config) {
+                        Ok(_) => info!("Audio auto-started with default devices"),
+                        Err(e) => warn!("Failed to auto-start audio: {}", e),
+                    }
+                }
+                Err(e) => warn!("Failed to lock audio service for auto-start: {}", e),
+            }
+
+            // Start background task to poll device events and emit to frontend
+            let app_handle = app.handle().clone();
+            let audio_service: Arc<std::sync::Mutex<audio_service::AudioServiceHandle>> =
+                state.audio_service.clone();
+            let shutdown_flag = state.device_poll_shutdown.clone();
+            let handle = std::thread::spawn(move || {
+                use tauri::Emitter;
+                info!("Device polling thread started");
+                while !shutdown_flag.load(Ordering::SeqCst) {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    if let Ok(service) = audio_service.lock() {
+                        while let Some(event) = service.try_recv_device_event() {
+                            let payload = match &event {
+                                audio_service::DeviceEvent::InputDeviceDisconnected {
+                                    fallback_device,
+                                } => serde_json::json!({
+                                    "type": "input",
+                                    "fallback": fallback_device
+                                }),
+                                audio_service::DeviceEvent::OutputDeviceDisconnected {
+                                    fallback_device,
+                                } => serde_json::json!({
+                                    "type": "output",
+                                    "fallback": fallback_device
+                                }),
+                            };
+                            let _ = app_handle.emit("device-disconnected", payload);
+                        }
+                    }
+                }
+                info!("Device polling thread exiting");
+            });
+
+            // Store thread handle for graceful shutdown
+            if let Ok(mut thread_handle) = state.device_poll_thread.lock() {
+                *thread_handle = Some(handle);
+            }
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             cmd_get_input_devices,
             cmd_get_output_devices,
@@ -585,6 +686,8 @@ pub fn run() {
             cmd_start_audio,
             cmd_stop_audio,
             cmd_set_local_monitoring,
+            cmd_set_input_device,
+            cmd_set_output_device,
             cmd_create_session,
             cmd_leave_session,
             cmd_get_session_status,

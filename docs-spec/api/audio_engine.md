@@ -20,6 +20,33 @@ Audio Engineは以下の責務を持つ:
 - 音声再生（出力）
 - ローカルモニタリング
 - サンプルレート変換
+- デバイス切断時の自動フォールバック
+
+### 1.1 自動開始仕様
+
+アプリケーション起動時、オーディオエンジンは**自動的に開始**される:
+
+- **開始タイミング**: Tauriアプリケーションの`setup`フック内
+- **使用デバイス**: システムのデフォルト入力/出力デバイス
+- **Start/Stopボタン**: UIに残すが、デバイス切り替えは即時反映
+- **失敗時**: エラーログを出力し、ユーザーは手動でデバイスを選択して再試行
+
+### 1.2 デバイス即時切り替え
+
+デバイス選択UIでデバイスを変更した場合:
+
+- **入力デバイス**: 即座にキャプチャストリームを再作成（10-50msの音切れ）
+- **出力デバイス**: 即座に再生ストリームを再作成（10-50msの音切れ）
+- 停止→再開始の操作は不要
+
+### 1.3 デバイス切断時の自動フォールバック
+
+使用中のデバイスが切断された場合:
+
+- cpalの`StreamError::DeviceNotAvailable`を検知
+- システムのデフォルトデバイスに自動切り替え
+- フロントエンドに`device-disconnected`イベントを送信
+- UIにトースト通知を表示
 
 ---
 
@@ -612,7 +639,72 @@ pub enum AudioError {
 
 ---
 
-## 13. スレッドモデル
+## 13. デバイスイベント
+
+### 13.1 AudioEvent
+
+オーディオストリームで発生するイベント。デバイス切断検知に使用。
+
+```rust
+/// Events that can occur during audio streaming
+#[derive(Debug, Clone)]
+pub enum AudioEvent {
+    /// Input device was disconnected
+    InputDeviceDisconnected,
+    /// Output device was disconnected
+    OutputDeviceDisconnected,
+    /// Stream error occurred
+    StreamError(String),
+}
+```
+
+### 13.2 イベント送信の設定
+
+```rust
+impl AudioEngine {
+    /// Set event sender for device change notifications
+    ///
+    /// Thread: Non-realtime thread
+    /// Must be called before starting capture/playback
+    pub fn set_event_sender(&mut self, tx: Sender<AudioEvent>);
+}
+```
+
+### 13.3 DeviceEvent（サービスレイヤー）
+
+AudioServiceからフロントエンドへ送信されるイベント。
+
+```rust
+/// Events sent from the audio thread to notify about device changes
+#[derive(Debug, Clone)]
+pub enum DeviceEvent {
+    /// Input device was disconnected and fallback occurred
+    InputDeviceDisconnected {
+        /// Device name if fallback succeeded, None if failed
+        fallback_device: Option<String>,
+    },
+    /// Output device was disconnected and fallback occurred
+    OutputDeviceDisconnected {
+        /// Device name if fallback succeeded, None if failed
+        fallback_device: Option<String>,
+    },
+}
+```
+
+### 13.4 Tauri イベント
+
+フロントエンドへは`device-disconnected`イベントとしてemitされる:
+
+```json
+{
+  "type": "input" | "output",
+  "fallback": "default" | null
+}
+```
+
+---
+
+## 14. スレッドモデル
 
 ```
 ┌─────────────────────────────────────────────────────────┐

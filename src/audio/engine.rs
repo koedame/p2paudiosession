@@ -1,16 +1,28 @@
 //! Audio engine for capture and playback
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Stream, StreamConfig};
 use ringbuf::traits::{Consumer, Producer, Split};
 use ringbuf::HeapRb;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use super::device::DeviceId;
 use super::error::AudioError;
+
+/// Events that can occur during audio streaming
+#[derive(Debug, Clone)]
+pub enum AudioEvent {
+    /// Input device was disconnected
+    InputDeviceDisconnected,
+    /// Output device was disconnected
+    OutputDeviceDisconnected,
+    /// Stream error occurred
+    StreamError(String),
+}
 
 /// Bit depth for audio samples
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -166,6 +178,11 @@ pub struct AudioEngine {
     playback_producer: Option<SharedPlaybackProducer>,
     // Local monitoring
     local_monitor_enabled: Arc<AtomicBool>,
+    // Current device IDs (None = default device)
+    current_input_device: Option<DeviceId>,
+    current_output_device: Option<DeviceId>,
+    // Event sender for device change notifications
+    event_tx: Option<Sender<AudioEvent>>,
 }
 
 impl AudioEngine {
@@ -178,7 +195,25 @@ impl AudioEngine {
             running: Arc::new(AtomicBool::new(false)),
             playback_producer: None,
             local_monitor_enabled: Arc::new(AtomicBool::new(false)),
+            current_input_device: None,
+            current_output_device: None,
+            event_tx: None,
         }
+    }
+
+    /// Set event sender for device change notifications
+    pub fn set_event_sender(&mut self, tx: Sender<AudioEvent>) {
+        self.event_tx = Some(tx);
+    }
+
+    /// Get current input device ID
+    pub fn current_input_device(&self) -> Option<&DeviceId> {
+        self.current_input_device.as_ref()
+    }
+
+    /// Get current output device ID
+    pub fn current_output_device(&self) -> Option<&DeviceId> {
+        self.current_output_device.as_ref()
     }
 
     /// Get the shared playback producer for external use (e.g., local monitoring)
@@ -216,6 +251,9 @@ impl AudioEngine {
         let device_name = device.name().unwrap_or_default();
         info!("Starting capture on device: {}", device_name);
 
+        // Store current device ID
+        self.current_input_device = device_id.cloned();
+
         let stream_config = StreamConfig {
             channels: self.config.channels,
             sample_rate: cpal::SampleRate(self.config.sample_rate),
@@ -227,7 +265,24 @@ impl AudioEngine {
         let callback = Arc::new(callback);
         let callback_clone = callback.clone();
 
-        let err_fn = |err| error!("Capture stream error: {}", err);
+        // Error callback with device disconnection detection
+        let event_tx = self.event_tx.clone();
+        let err_fn = move |err: cpal::StreamError| {
+            error!("Capture stream error: {:?}", err);
+            match err {
+                cpal::StreamError::DeviceNotAvailable => {
+                    warn!("Input device disconnected");
+                    if let Some(ref tx) = event_tx {
+                        let _ = tx.send(AudioEvent::InputDeviceDisconnected);
+                    }
+                }
+                _ => {
+                    if let Some(ref tx) = event_tx {
+                        let _ = tx.send(AudioEvent::StreamError(err.to_string()));
+                    }
+                }
+            }
+        };
 
         let stream = device
             .build_input_stream(
@@ -270,6 +325,9 @@ impl AudioEngine {
         let device_name = device.name().unwrap_or_default();
         info!("Starting playback on device: {}", device_name);
 
+        // Store current device ID
+        self.current_output_device = device_id.cloned();
+
         let stream_config = StreamConfig {
             channels: self.config.channels,
             sample_rate: cpal::SampleRate(self.config.sample_rate),
@@ -286,7 +344,24 @@ impl AudioEngine {
         let consumer = Arc::new(std::sync::Mutex::new(consumer));
         let consumer_clone = consumer.clone();
 
-        let err_fn = |err| error!("Playback stream error: {}", err);
+        // Error callback with device disconnection detection
+        let event_tx = self.event_tx.clone();
+        let err_fn = move |err: cpal::StreamError| {
+            error!("Playback stream error: {:?}", err);
+            match err {
+                cpal::StreamError::DeviceNotAvailable => {
+                    warn!("Output device disconnected");
+                    if let Some(ref tx) = event_tx {
+                        let _ = tx.send(AudioEvent::OutputDeviceDisconnected);
+                    }
+                }
+                _ => {
+                    if let Some(ref tx) = event_tx {
+                        let _ = tx.send(AudioEvent::StreamError(err.to_string()));
+                    }
+                }
+            }
+        };
 
         let stream = device
             .build_output_stream(
@@ -371,6 +446,64 @@ impl AudioEngine {
     /// Get current configuration
     pub fn config(&self) -> &AudioConfig {
         &self.config
+    }
+
+    /// Switch input device while running
+    ///
+    /// Thread: Must be called from non-realtime thread
+    /// Blocking: Yes (until new stream is ready)
+    ///
+    /// This stops the existing capture stream and starts a new one with the new device.
+    /// There will be a brief audio gap (~10-50ms) during the switch.
+    pub fn set_input_device<F>(
+        &mut self,
+        device_id: Option<&DeviceId>,
+        callback: F,
+    ) -> Result<(), AudioError>
+    where
+        F: Fn(&[f32], u64) + Send + Sync + 'static,
+    {
+        info!("Switching input device to: {:?}", device_id.map(|d| &d.0));
+
+        // Stop existing capture stream
+        self.stop_capture();
+
+        // Start new capture with new device
+        self.start_capture(device_id, callback)
+    }
+
+    /// Switch output device while running
+    ///
+    /// Thread: Must be called from non-realtime thread
+    /// Blocking: Yes (until new stream is ready)
+    ///
+    /// This stops the existing playback stream and starts a new one with the new device.
+    /// There will be a brief audio gap (~10-50ms) during the switch.
+    pub fn set_output_device(&mut self, device_id: Option<&DeviceId>) -> Result<(), AudioError> {
+        info!("Switching output device to: {:?}", device_id.map(|d| &d.0));
+
+        // Check if playback was running
+        let was_running = self.playback_stream.is_some();
+
+        // Stop existing playback stream
+        self.stop_playback();
+
+        // Start new playback with new device if it was running
+        if was_running {
+            self.start_playback(device_id)?;
+        }
+
+        Ok(())
+    }
+
+    /// Check if capture is currently running
+    pub fn is_capture_running(&self) -> bool {
+        self.capture_stream.is_some()
+    }
+
+    /// Check if playback is currently running
+    pub fn is_playback_running(&self) -> bool {
+        self.playback_stream.is_some()
     }
 }
 

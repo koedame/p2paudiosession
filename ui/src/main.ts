@@ -1,5 +1,6 @@
 // jamjam UI Application
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { initI18n, t, changeLanguage, getCurrentLanguage } from "./i18n";
 import type {
   DeviceInfo,
@@ -24,6 +25,9 @@ const state = {
   rooms: [] as RoomInfo[],
   currentRoomId: null as string | null,
   peerName: "User",
+  // Device selection state
+  currentInputDevice: null as string | null,
+  currentOutputDevice: null as string | null,
 };
 
 // DOM element cache
@@ -47,6 +51,28 @@ async function init(): Promise<void> {
 
   // Setup event listeners
   setupEventListeners();
+
+  // Audio is auto-started by backend, update UI state
+  const status = await invoke<SessionStatus>("cmd_get_session_status");
+  state.audioRunning = status.audio_running;
+  updateAudioButtonState();
+
+  // Listen for device disconnection events
+  await listen<{ type: string; fallback: string | null }>(
+    "device-disconnected",
+    (event) => {
+      const { type, fallback } = event.payload;
+      const deviceType =
+        type === "input" ? t("audio.inputDevice") : t("audio.outputDevice");
+      if (fallback) {
+        showToast(t("audio.deviceDisconnectedFallback", { deviceType }), "warning");
+      } else {
+        showToast(t("audio.deviceDisconnectedFailed", { deviceType }), "error");
+      }
+      // Refresh device list to update UI
+      loadDevices();
+    }
+  );
 
   // Start status polling
   setInterval(updateStatus, 1000);
@@ -238,15 +264,11 @@ function renderAudioPanel(): string {
       <h2>${t("audio.title")}</h2>
       <div class="form-group">
         <label for="input-device">${t("audio.inputDevice")}</label>
-        <select id="input-device">
-          <option value="">${t("audio.default")}</option>
-        </select>
+        <select id="input-device"></select>
       </div>
       <div class="form-group">
         <label for="output-device">${t("audio.outputDevice")}</label>
-        <select id="output-device">
-          <option value="">${t("audio.default")}</option>
-        </select>
+        <select id="output-device"></select>
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -455,23 +477,35 @@ async function loadDevices(): Promise<void> {
     const outputSelect = elements.outputDevice as HTMLSelectElement;
 
     if (inputSelect) {
-      inputSelect.innerHTML = `<option value="">${t("audio.default")}</option>`;
+      inputSelect.innerHTML = "";
       inputDevices.forEach((device) => {
         const option = document.createElement("option");
         option.value = device.id;
-        option.textContent =
-          device.name + (device.is_default ? " (default)" : "");
+        option.textContent = device.name;
+        // Restore previous selection or use default
+        if (
+          state.currentInputDevice === device.id ||
+          (!state.currentInputDevice && device.is_default)
+        ) {
+          option.selected = true;
+        }
         inputSelect.appendChild(option);
       });
     }
 
     if (outputSelect) {
-      outputSelect.innerHTML = `<option value="">${t("audio.default")}</option>`;
+      outputSelect.innerHTML = "";
       outputDevices.forEach((device) => {
         const option = document.createElement("option");
         option.value = device.id;
-        option.textContent =
-          device.name + (device.is_default ? " (default)" : "");
+        option.textContent = device.name;
+        // Restore previous selection or use default
+        if (
+          state.currentOutputDevice === device.id ||
+          (!state.currentOutputDevice && device.is_default)
+        ) {
+          option.selected = true;
+        }
         outputSelect.appendChild(option);
       });
     }
@@ -564,6 +598,33 @@ function setupEventListeners(): void {
   // Audio settings
   elements.sampleRate?.addEventListener("change", updateAudioConfig);
   elements.frameSize?.addEventListener("change", updateAudioConfig);
+
+  // Device selection - immediate switching
+  elements.inputDevice?.addEventListener("change", async (e) => {
+    const select = e.target as HTMLSelectElement;
+    const deviceId = select.value;
+    try {
+      await invoke("cmd_set_input_device", { deviceId });
+      state.currentInputDevice = deviceId;
+      showToast(t("audio.inputDeviceChanged"), "success");
+    } catch (error) {
+      console.error("Failed to switch input device:", error);
+      showToast(t("error.inputDeviceSwitchFailed") + ": " + error, "error");
+    }
+  });
+
+  elements.outputDevice?.addEventListener("change", async (e) => {
+    const select = e.target as HTMLSelectElement;
+    const deviceId = select.value;
+    try {
+      await invoke("cmd_set_output_device", { deviceId });
+      state.currentOutputDevice = deviceId;
+      showToast(t("audio.outputDeviceChanged"), "success");
+    } catch (error) {
+      console.error("Failed to switch output device:", error);
+      showToast(t("error.outputDeviceSwitchFailed") + ": " + error, "error");
+    }
+  });
 
   // Local mute
   elements.muteLocal?.addEventListener("click", toggleLocalMute);
@@ -818,15 +879,28 @@ function copyInvite(): void {
   }
 }
 
+// Update audio button state to reflect current state
+function updateAudioButtonState(): void {
+  const startBtn = elements.btnStartAudio as HTMLButtonElement;
+  const stopBtn = elements.btnStopAudio as HTMLButtonElement;
+
+  if (startBtn) {
+    startBtn.disabled = state.audioRunning;
+  }
+  if (stopBtn) {
+    stopBtn.disabled = !state.audioRunning;
+  }
+}
+
 // Start audio
 async function startAudio(): Promise<void> {
   try {
     await updateAudioConfig();
 
     const inputDevice =
-      (elements.inputDevice as HTMLSelectElement)?.value || null;
+      (elements.inputDevice as HTMLSelectElement)?.value || undefined;
     const outputDevice =
-      (elements.outputDevice as HTMLSelectElement)?.value || null;
+      (elements.outputDevice as HTMLSelectElement)?.value || undefined;
 
     await invoke("cmd_start_audio", { inputDevice, outputDevice });
 
