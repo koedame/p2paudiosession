@@ -48,7 +48,7 @@ services:
       - ECHO_DELAY_MS=${ECHO_DELAY_MS:-3000}
       - SIGNALING_URL=ws://signaling-server:8080
       - PUBLIC_ADDR=${ECHO_PUBLIC_ADDR:-}
-    command: ["--port", "5000", "--signaling-url", "ws://signaling-server:8080"]
+    command: ["--port", "5000", "--signaling-url", "ws://signaling-server:8080", "--public-addr", "{{ jamjam_echo_public_addr }}"]
     restart: unless-stopped
     networks:
       - jamjam-network
