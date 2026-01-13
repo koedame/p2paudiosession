@@ -3,6 +3,7 @@
 mod audio_service;
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
@@ -16,6 +17,24 @@ use jamjam::network::{
 
 use audio_service::AudioServiceHandle;
 
+/// Per-peer audio settings (volume, pan, mute)
+#[derive(Debug, Clone)]
+pub struct PeerAudioSettings {
+    pub volume: f32, // 0.0-1.0 (linear)
+    pub pan: f32,    // -1.0 (left) to 1.0 (right)
+    pub muted: bool,
+}
+
+impl Default for PeerAudioSettings {
+    fn default() -> Self {
+        Self {
+            volume: 1.0,
+            pan: 0.0,
+            muted: false,
+        }
+    }
+}
+
 /// Application state
 pub struct AppState {
     pub session: Arc<Mutex<Option<Session>>>,
@@ -25,6 +44,8 @@ pub struct AppState {
     pub signaling_conn: Arc<Mutex<Option<SignalingConnection>>>,
     pub current_room_id: Arc<Mutex<Option<String>>>,
     pub my_peer_id: Arc<Mutex<Option<Uuid>>>,
+    // Per-peer audio settings
+    pub peer_audio_settings: Arc<std::sync::Mutex<HashMap<Uuid, PeerAudioSettings>>>,
 }
 
 impl Default for AppState {
@@ -36,6 +57,7 @@ impl Default for AppState {
             signaling_conn: Arc::new(Mutex::new(None)),
             current_room_id: Arc::new(Mutex::new(None)),
             my_peer_id: Arc::new(Mutex::new(None)),
+            peer_audio_settings: Arc::new(std::sync::Mutex::new(HashMap::new())),
         }
     }
 }
@@ -196,11 +218,27 @@ async fn cmd_create_session(
         .await
         .map_err(|e| e.to_string())?;
 
-    // Register callback to feed received audio to AudioEngine
+    // Register callback to feed received audio to AudioEngine with per-peer volume
+    let peer_audio_settings = state.peer_audio_settings.clone();
     let audio_service = state.audio_service.clone();
-    session.set_mixed_audio_callback(move |samples: &[f32], _timestamp: u32| {
+    session.set_peer_audio_callback(move |peer_id: Uuid, samples: &[f32], _timestamp: u32| {
+        // Get peer settings (volume, muted, etc.)
+        let settings = peer_audio_settings
+            .lock()
+            .ok()
+            .and_then(|s| s.get(&peer_id).cloned())
+            .unwrap_or_default();
+
+        // Skip muted peers
+        if settings.muted {
+            return;
+        }
+
+        // Apply volume
+        let processed: Vec<f32> = samples.iter().map(|&s| s * settings.volume).collect();
+
         if let Ok(service) = audio_service.lock() {
-            service.enqueue_remote_audio(samples.to_vec());
+            service.enqueue_remote_audio(processed);
         }
     });
 
@@ -393,11 +431,27 @@ async fn cmd_join_room(
             }
         }
 
-        // Register callback to feed received audio to AudioEngine
+        // Register callback to feed received audio to AudioEngine with per-peer volume
+        let peer_audio_settings = state.peer_audio_settings.clone();
         let audio_service = state.audio_service.clone();
-        session.set_mixed_audio_callback(move |samples: &[f32], _timestamp: u32| {
+        session.set_peer_audio_callback(move |peer_id: Uuid, samples: &[f32], _timestamp: u32| {
+            // Get peer settings (volume, muted, etc.)
+            let settings = peer_audio_settings
+                .lock()
+                .ok()
+                .and_then(|s| s.get(&peer_id).cloned())
+                .unwrap_or_default();
+
+            // Skip muted peers
+            if settings.muted {
+                return;
+            }
+
+            // Apply volume
+            let processed: Vec<f32> = samples.iter().map(|&s| s * settings.volume).collect();
+
             if let Ok(service) = audio_service.lock() {
-                service.enqueue_remote_audio(samples.to_vec());
+                service.enqueue_remote_audio(processed);
             }
         });
 
@@ -462,6 +516,58 @@ async fn cmd_get_signaling_status(state: State<'_, AppState>) -> Result<bool, St
     Ok(conn_guard.is_some())
 }
 
+// ============================================
+// Peer Audio Settings Commands
+// ============================================
+
+#[tauri::command]
+async fn cmd_set_peer_volume(
+    state: State<'_, AppState>,
+    peer_id: String,
+    volume: f32,
+) -> Result<(), String> {
+    let peer_uuid = Uuid::parse_str(&peer_id).map_err(|e| e.to_string())?;
+    let mut settings = state
+        .peer_audio_settings
+        .lock()
+        .map_err(|e| e.to_string())?;
+    settings.entry(peer_uuid).or_default().volume = volume.clamp(0.0, 1.0);
+    info!("Set peer {} volume to {}", peer_id, volume);
+    Ok(())
+}
+
+#[tauri::command]
+async fn cmd_set_peer_pan(
+    state: State<'_, AppState>,
+    peer_id: String,
+    pan: f32,
+) -> Result<(), String> {
+    let peer_uuid = Uuid::parse_str(&peer_id).map_err(|e| e.to_string())?;
+    let mut settings = state
+        .peer_audio_settings
+        .lock()
+        .map_err(|e| e.to_string())?;
+    settings.entry(peer_uuid).or_default().pan = pan.clamp(-1.0, 1.0);
+    info!("Set peer {} pan to {}", peer_id, pan);
+    Ok(())
+}
+
+#[tauri::command]
+async fn cmd_set_peer_muted(
+    state: State<'_, AppState>,
+    peer_id: String,
+    muted: bool,
+) -> Result<(), String> {
+    let peer_uuid = Uuid::parse_str(&peer_id).map_err(|e| e.to_string())?;
+    let mut settings = state
+        .peer_audio_settings
+        .lock()
+        .map_err(|e| e.to_string())?;
+    settings.entry(peer_uuid).or_default().muted = muted;
+    info!("Set peer {} muted to {}", peer_id, muted);
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tracing_subscriber::fmt()
@@ -490,6 +596,10 @@ pub fn run() {
             cmd_join_room,
             cmd_leave_room,
             cmd_get_signaling_status,
+            // Peer audio settings commands
+            cmd_set_peer_volume,
+            cmd_set_peer_pan,
+            cmd_set_peer_muted,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

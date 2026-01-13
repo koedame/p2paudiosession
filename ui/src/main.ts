@@ -1005,12 +1005,30 @@ function createPeerChannel(peer: PeerInfo): HTMLElement {
     </div>
   `;
 
+  // Add volume slider handler
+  const volumeSlider = channel.querySelector(".volume-slider") as HTMLInputElement;
+  volumeSlider?.addEventListener("input", async (e) => {
+    const slider = e.target as HTMLInputElement;
+    const volume = parseInt(slider.value) / 100;
+    try {
+      await invoke("cmd_set_peer_volume", { peerId: peer.id, volume });
+    } catch (error) {
+      console.error("Failed to set peer volume:", error);
+    }
+  });
+
   // Add mute handler
   const muteBtn = channel.querySelector(".btn-icon");
   let muted = false;
-  muteBtn?.addEventListener("click", () => {
+  muteBtn?.addEventListener("click", async () => {
     muted = !muted;
     muteBtn.classList.toggle("active", muted);
+    muteBtn.setAttribute("aria-pressed", muted.toString());
+    try {
+      await invoke("cmd_set_peer_muted", { peerId: peer.id, muted });
+    } catch (error) {
+      console.error("Failed to set peer muted:", error);
+    }
   });
 
   return channel;
