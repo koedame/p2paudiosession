@@ -243,43 +243,82 @@ struct SessionDescription {
 
 ---
 
-## 5. イベント
+## 5. メッセージ型
+
+シグナリングプロトコルで使用されるメッセージ型。
+クライアント↔サーバー間の双方向通信で使用される。
 
 ```rust
-enum SignalingEvent {
-    /// 接続完了
-    Connected,
-    /// 切断
-    Disconnected,
-    /// 参加者が参加
-    ParticipantJoined(Participant),
-    /// 参加者が退出
-    ParticipantLeft(ParticipantId),
-    /// ICE候補受信
-    IceCandidateReceived {
-        from: ParticipantId,
-        candidate: IceCandidate,
+/// シグナリングメッセージ
+///
+/// WebSocket JSON形式で送受信される。
+/// serde: adjacently tagged format - `#[serde(tag = "type", content = "data")]`
+enum SignalingMessage {
+    // --- Client → Server ---
+    /// ルーム一覧を取得
+    ListRooms,
+    /// ルームを作成
+    CreateRoom {
+        room_name: String,
+        password: Option<String>,
+        peer_name: String,
     },
-    /// SDPオファー受信
-    OfferReceived {
-        from: ParticipantId,
-        offer: SessionDescription,
+    /// ルームに参加
+    JoinRoom {
+        room_id: String,
+        password: Option<String>,
+        peer_name: String,
     },
-    /// SDPアンサー受信
-    AnswerReceived {
-        from: ParticipantId,
-        answer: SessionDescription,
+    /// ルームから退出
+    LeaveRoom,
+    /// ピア情報を更新
+    UpdatePeerInfo {
+        public_addr: Option<SocketAddr>,
+        local_addr: Option<SocketAddr>,
     },
-    /// ルーム終了
-    RoomClosed,
+
+    // --- Server → Client ---
+    /// ルーム一覧
+    RoomList { rooms: Vec<RoomInfo> },
+    /// ルーム作成完了
+    RoomCreated { room_id: String, peer_id: Uuid },
+    /// ルーム参加完了
+    RoomJoined {
+        room_id: String,
+        peer_id: Uuid,
+        peers: Vec<PeerInfo>,
+    },
+    /// ピアが参加
+    PeerJoined { peer: PeerInfo },
+    /// ピアが退出
+    PeerLeft { peer_id: Uuid },
+    /// ピア情報が更新された
+    PeerUpdated { peer: PeerInfo },
     /// エラー
-    Error(SignalingError),
+    Error { message: String },
 }
 
-/// イベントリスナーを設定
-fn set_event_listener<F>(&self, listener: F)
+/// ピア情報
+struct PeerInfo {
+    id: Uuid,
+    name: String,
+    public_addr: Option<SocketAddr>,
+    local_addr: Option<SocketAddr>,
+}
+
+/// ルーム情報
+struct RoomInfo {
+    id: String,
+    name: String,
+    peer_count: usize,
+    max_peers: usize,
+    has_password: bool,
+}
+
+/// メッセージリスナーを設定
+fn set_message_listener<F>(&self, listener: F)
 where
-    F: Fn(SignalingEvent) + Send + 'static;
+    F: Fn(SignalingMessage) + Send + 'static;
 ```
 
 ### 5.1 接続状態遷移
@@ -556,47 +595,46 @@ enum SignalingError {
 
 ```rust
 // シグナリングサーバーに接続
-let client = SignalingClient::connect("wss://signaling.jamjam.example/v1").await?;
-
-// イベントリスナー設定
-client.set_event_listener(|event| {
-    match event {
-        SignalingEvent::ParticipantJoined(p) => {
-            println!("{} joined", p.display_name);
-            // ICE接続開始
-        }
-        SignalingEvent::IceCandidateReceived { from, candidate } => {
-            // ICE候補を追加
-            ice_agent.add_remote_candidate(from, candidate);
-        }
-        SignalingEvent::OfferReceived { from, offer } => {
-            // オファーを処理してアンサーを送信
-            let answer = create_answer(&offer);
-            client.send_answer(from, answer).await?;
-        }
-        _ => {}
-    }
-});
+let client = SignalingClient::new("wss://signaling.jamjam.example/v1");
+let mut conn = client.connect().await?;
 
 // ルーム作成
-let room = client.create_room(CreateRoomOptions {
-    name: Some("Guitar Session".into()),
+conn.send(SignalingMessage::CreateRoom {
+    room_name: "Guitar Session".into(),
     password: None,
-    max_participants: 5,
-    is_public: false,
+    peer_name: "Host".into(),
 }).await?;
 
-println!("Invite code: {}", room.invite_code);
+match conn.recv().await? {
+    SignalingMessage::RoomCreated { room_id, peer_id } => {
+        println!("Room created: {} (peer: {})", room_id, peer_id);
+    }
+    SignalingMessage::Error { message } => {
+        return Err(anyhow::anyhow!("Failed: {}", message));
+    }
+    _ => {}
+}
 
 // または、ルーム参加
-let session = client.join_room_by_code("ABC123", JoinRoomOptions {
-    display_name: "Player1".into(),
+conn.send(SignalingMessage::JoinRoom {
+    room_id: "ABC123".into(),
     password: None,
+    peer_name: "Player1".into(),
 }).await?;
 
-// ICE候補を送信
-client.send_ice_candidate(target_id, candidate).await?;
+match conn.recv().await? {
+    SignalingMessage::RoomJoined { room_id, peer_id, peers } => {
+        println!("Joined room: {} as {}", room_id, peer_id);
+        for peer in &peers {
+            println!("  Peer: {} ({})", peer.name, peer.id);
+        }
+    }
+    SignalingMessage::Error { message } => {
+        return Err(anyhow::anyhow!("Failed: {}", message));
+    }
+    _ => {}
+}
 
 // 退出
-client.leave_room().await?;
+conn.send(SignalingMessage::LeaveRoom).await?;
 ```

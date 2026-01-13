@@ -47,21 +47,41 @@ network/
 ### 3.1 接続状態
 
 ```rust
+/// 接続状態（AtomicU8でアトミックに管理）
+#[repr(u8)]
 enum ConnectionState {
     /// 切断中
-    Disconnected,
+    Disconnected = 0,
     /// 接続試行中
-    Connecting,
+    Connecting = 1,
     /// ICE候補収集中
-    GatheringCandidates,
+    GatheringCandidates = 2,
     /// ICE接続中
-    CheckingConnectivity,
+    CheckingConnectivity = 3,
     /// 接続完了
-    Connected,
+    Connected = 4,
     /// 再接続中
-    Reconnecting,
-    /// 失敗
-    Failed(ConnectionError),
+    Reconnecting = 5,
+    /// 失敗（エラー詳細はlast_error()で取得）
+    Failed = 6,
+}
+
+impl ConnectionState {
+    /// 接続済みか
+    fn is_connected(&self) -> bool;
+    /// 接続処理中か
+    fn is_connecting(&self) -> bool;
+    /// データ送受信可能か
+    fn can_transmit(&self) -> bool;
+}
+```
+
+エラー情報は状態と分離して管理:
+
+```rust
+impl Connection {
+    /// 失敗時のエラーメッセージを取得
+    fn last_error(&self) -> Option<String>;
 }
 ```
 

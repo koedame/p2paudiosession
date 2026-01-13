@@ -1,7 +1,7 @@
 //! Connection management for P2P audio streaming
 
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -35,12 +35,74 @@ pub struct ConnectionStats {
 }
 
 /// Connection state
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
+///
+/// State machine for P2P connections with ICE/NAT traversal support.
+///
+/// ```text
+/// [*] --> Disconnected
+/// Disconnected --> Connecting: connect()
+/// Connecting --> GatheringCandidates: ICE start
+/// GatheringCandidates --> CheckingConnectivity: candidates ready
+/// CheckingConnectivity --> Connected: ICE success
+/// CheckingConnectivity --> Failed: ICE failed
+/// Connected --> Reconnecting: connection lost
+/// Reconnecting --> Connected: reconnect success
+/// Reconnecting --> Failed: timeout
+/// Connected --> Disconnected: disconnect()
+/// Failed --> Disconnected: reset()
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u8)]
 pub enum ConnectionState {
-    Disconnected,
-    Connecting,
-    Connected,
+    /// Not connected
+    #[default]
+    Disconnected = 0,
+    /// Initiating connection
+    Connecting = 1,
+    /// Gathering ICE candidates
+    GatheringCandidates = 2,
+    /// Checking connectivity with candidates
+    CheckingConnectivity = 3,
+    /// Successfully connected
+    Connected = 4,
+    /// Attempting to reconnect after connection loss
+    Reconnecting = 5,
+    /// Connection failed
+    Failed = 6,
+}
+
+impl ConnectionState {
+    /// Convert from u8 value
+    pub fn from_u8(value: u8) -> Self {
+        match value {
+            0 => Self::Disconnected,
+            1 => Self::Connecting,
+            2 => Self::GatheringCandidates,
+            3 => Self::CheckingConnectivity,
+            4 => Self::Connected,
+            5 => Self::Reconnecting,
+            6 => Self::Failed,
+            _ => Self::Disconnected,
+        }
+    }
+
+    /// Check if the connection is in a connected state
+    pub fn is_connected(&self) -> bool {
+        matches!(self, Self::Connected)
+    }
+
+    /// Check if the connection is in progress
+    pub fn is_connecting(&self) -> bool {
+        matches!(
+            self,
+            Self::Connecting | Self::GatheringCandidates | Self::CheckingConnectivity
+        )
+    }
+
+    /// Check if the connection can send/receive data
+    pub fn can_transmit(&self) -> bool {
+        matches!(self, Self::Connected | Self::Reconnecting)
+    }
 }
 
 /// Callback for received audio data
@@ -50,7 +112,9 @@ pub type AudioCallback = Box<dyn Fn(&[u8], u32) + Send + Sync + 'static>;
 pub struct Connection {
     transport: Arc<UdpTransport>,
     remote_addr: SocketAddr,
-    state: Arc<AtomicBool>, // true = connected
+    state: Arc<AtomicU8>,
+    /// Last error message that caused connection failure (if any)
+    last_error: Arc<std::sync::Mutex<Option<String>>>,
     sequence: AtomicU32,
     packets_sent: Arc<AtomicU64>,
     packets_received: Arc<AtomicU64>,
@@ -70,7 +134,8 @@ impl Connection {
         Ok(Self {
             transport: Arc::new(transport),
             remote_addr: "0.0.0.0:0".parse().unwrap(),
-            state: Arc::new(AtomicBool::new(false)),
+            state: Arc::new(AtomicU8::new(ConnectionState::Disconnected as u8)),
+            last_error: Arc::new(std::sync::Mutex::new(None)),
             sequence: AtomicU32::new(0),
             packets_sent: Arc::new(AtomicU64::new(0)),
             packets_received: Arc::new(AtomicU64::new(0)),
@@ -95,13 +160,14 @@ impl Connection {
         }
 
         self.remote_addr = remote_addr;
+        self.set_state(ConnectionState::Connecting);
         info!("Connecting to {}", remote_addr);
 
         // Send initial keep-alive to establish connection
         let packet = Packet::keep_alive(self.next_sequence());
         self.transport.send_to(&packet, remote_addr).await?;
 
-        self.state.store(true, Ordering::SeqCst);
+        self.set_state(ConnectionState::Connected);
         self.start_receive_loop();
         self.start_keepalive_loop();
 
@@ -111,7 +177,7 @@ impl Connection {
 
     /// Disconnect from the remote peer
     pub fn disconnect(&mut self) {
-        self.state.store(false, Ordering::SeqCst);
+        self.set_state(ConnectionState::Disconnected);
 
         if let Some(handle) = self.receive_handle.take() {
             handle.abort();
@@ -125,7 +191,40 @@ impl Connection {
 
     /// Check if connected
     pub fn is_connected(&self) -> bool {
-        self.state.load(Ordering::SeqCst)
+        self.state().is_connected()
+    }
+
+    /// Get current connection state
+    pub fn state(&self) -> ConnectionState {
+        ConnectionState::from_u8(self.state.load(Ordering::SeqCst))
+    }
+
+    /// Set connection state
+    fn set_state(&self, state: ConnectionState) {
+        // Clear last_error when transitioning to a non-failed state
+        if state != ConnectionState::Failed {
+            if let Ok(mut err) = self.last_error.lock() {
+                *err = None;
+            }
+        }
+        self.state.store(state as u8, Ordering::SeqCst);
+    }
+
+    /// Set connection to failed state with error information
+    #[allow(dead_code)]
+    fn set_failed(&self, error: &NetworkError) {
+        if let Ok(mut err) = self.last_error.lock() {
+            *err = Some(error.to_string());
+        }
+        self.state
+            .store(ConnectionState::Failed as u8, Ordering::SeqCst);
+    }
+
+    /// Get the last error message that caused connection failure
+    ///
+    /// Returns `None` if the connection has not failed or if no error was recorded.
+    pub fn last_error(&self) -> Option<String> {
+        self.last_error.lock().ok().and_then(|e| e.clone())
     }
 
     /// Set callback for received audio data
@@ -138,7 +237,7 @@ impl Connection {
 
     /// Send audio data to the remote peer
     pub async fn send_audio(&self, data: &[f32], timestamp: u32) -> Result<(), NetworkError> {
-        if !self.is_connected() {
+        if !self.state().can_transmit() {
             return Err(NetworkError::NotConnected);
         }
 
@@ -187,7 +286,8 @@ impl Connection {
             let (mut rx, _recv_handle) = transport.clone().start_receive_loop();
 
             while let Some((packet, _addr)) = rx.recv().await {
-                if !state.load(Ordering::SeqCst) {
+                let current_state = ConnectionState::from_u8(state.load(Ordering::SeqCst));
+                if !current_state.can_transmit() {
                     break;
                 }
 
@@ -224,7 +324,8 @@ impl Connection {
             loop {
                 interval.tick().await;
 
-                if !state.load(Ordering::SeqCst) {
+                let current_state = ConnectionState::from_u8(state.load(Ordering::SeqCst));
+                if !current_state.can_transmit() {
                     break;
                 }
 

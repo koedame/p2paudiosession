@@ -13,11 +13,13 @@ mod signaling;
 mod stun;
 mod transport;
 
-pub use connection::Connection;
+pub use connection::{Connection, ConnectionState};
 pub use encryption::{EncryptedTransport, EncryptionContext, KeyExchangeMessage, KeyPair};
 pub use error::NetworkError;
 pub use fec::{FecDecoder, FecEncoder, FecPacket, RecoveredPacket, FEC_GROUP_SIZE};
-pub use jitter_buffer::{JitterBuffer, JitterBufferConfig, JitterBufferResult, JitterBufferStats};
+pub use jitter_buffer::{
+    JitterBuffer, JitterBufferConfig, JitterBufferMode, JitterBufferResult, JitterBufferStats,
+};
 pub use sequence_tracker::SequenceTracker;
 pub use session::{Session, SessionConfig};
 pub use signaling::{

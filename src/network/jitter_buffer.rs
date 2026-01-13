@@ -6,9 +6,25 @@
 use std::collections::BTreeMap;
 use std::time::Instant;
 
+/// Jitter buffer operating mode
+///
+/// Determines how the buffer adjusts its delay based on network conditions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum JitterBufferMode {
+    /// Adaptive mode: automatically adjusts delay based on packet loss
+    #[default]
+    Adaptive,
+    /// Fixed mode: maintains constant delay
+    Fixed,
+    /// Passthrough mode: no buffering, minimum latency
+    Passthrough,
+}
+
 /// Configuration for the jitter buffer
 #[derive(Debug, Clone)]
 pub struct JitterBufferConfig {
+    /// Buffer operating mode
+    pub mode: JitterBufferMode,
     /// Minimum buffer delay in frames (default: 1, must be >= 1)
     pub min_delay_frames: u32,
     /// Maximum buffer delay in frames (default: 10)
@@ -28,12 +44,17 @@ impl JitterBufferConfig {
     /// - initial_delay_frames clamped between min and max
     /// - frame_duration_ms > 0
     pub fn validated(self) -> Self {
-        // Allow 0 for passthrough mode (zero-latency preset)
-        let min_delay_frames = self.min_delay_frames;
-        let max_delay_frames = self.max_delay_frames.max(min_delay_frames).max(1);
-        let initial_delay_frames = self
-            .initial_delay_frames
-            .clamp(min_delay_frames, max_delay_frames);
+        // For passthrough mode, force delay to 0
+        let (min_delay_frames, max_delay_frames, initial_delay_frames) =
+            if self.mode == JitterBufferMode::Passthrough {
+                (0, 1, 0)
+            } else {
+                let min = self.min_delay_frames;
+                let max = self.max_delay_frames.max(min).max(1);
+                let initial = self.initial_delay_frames.clamp(min, max);
+                (min, max, initial)
+            };
+
         let frame_duration_ms = if self.frame_duration_ms > 0.0 {
             self.frame_duration_ms
         } else {
@@ -41,6 +62,7 @@ impl JitterBufferConfig {
         };
 
         Self {
+            mode: self.mode,
             min_delay_frames,
             max_delay_frames,
             initial_delay_frames,
@@ -54,9 +76,37 @@ impl JitterBufferConfig {
     /// This minimizes latency but provides no jitter protection.
     pub fn passthrough(frame_duration_ms: f32) -> Self {
         Self {
+            mode: JitterBufferMode::Passthrough,
             min_delay_frames: 0,
             max_delay_frames: 1,
             initial_delay_frames: 0,
+            frame_duration_ms,
+        }
+    }
+
+    /// Create an adaptive configuration
+    pub fn adaptive(
+        min_delay: u32,
+        max_delay: u32,
+        initial_delay: u32,
+        frame_duration_ms: f32,
+    ) -> Self {
+        Self {
+            mode: JitterBufferMode::Adaptive,
+            min_delay_frames: min_delay,
+            max_delay_frames: max_delay,
+            initial_delay_frames: initial_delay,
+            frame_duration_ms,
+        }
+    }
+
+    /// Create a fixed delay configuration
+    pub fn fixed(delay_frames: u32, frame_duration_ms: f32) -> Self {
+        Self {
+            mode: JitterBufferMode::Fixed,
+            min_delay_frames: delay_frames,
+            max_delay_frames: delay_frames,
+            initial_delay_frames: delay_frames,
             frame_duration_ms,
         }
     }
@@ -65,6 +115,7 @@ impl JitterBufferConfig {
 impl Default for JitterBufferConfig {
     fn default() -> Self {
         Self {
+            mode: JitterBufferMode::Adaptive,
             min_delay_frames: 1,
             max_delay_frames: 10,
             initial_delay_frames: 2,
@@ -113,6 +164,8 @@ pub struct JitterBuffer {
     next_play_sequence: Option<u32>,
     /// Configuration
     config: JitterBufferConfig,
+    /// Buffer operating mode
+    mode: JitterBufferMode,
     /// Current buffer delay in frames
     current_delay_frames: u32,
     /// Jitter estimate in milliseconds
@@ -142,10 +195,12 @@ impl JitterBuffer {
     /// The configuration is validated to ensure sensible values.
     pub fn with_config(config: JitterBufferConfig) -> Self {
         let config = config.validated();
+        let mode = config.mode;
         Self {
             packets: BTreeMap::new(),
             next_play_sequence: None,
             current_delay_frames: config.initial_delay_frames,
+            mode,
             jitter_estimate_ms: 0.0,
             packets_inserted: 0,
             packets_played: 0,
@@ -155,6 +210,11 @@ impl JitterBuffer {
             first_timestamp: None,
             config,
         }
+    }
+
+    /// Get current operating mode
+    pub fn mode(&self) -> JitterBufferMode {
+        self.mode
     }
 
     /// Insert a received packet into the buffer
@@ -282,7 +342,13 @@ impl JitterBuffer {
     /// Adapt buffer size based on network conditions
     ///
     /// Call this periodically (e.g., every 100ms) to adjust buffer size.
+    /// Only has effect in Adaptive mode; Fixed and Passthrough modes ignore this.
     pub fn adapt(&mut self) {
+        // Only adapt in Adaptive mode
+        if self.mode != JitterBufferMode::Adaptive {
+            return;
+        }
+
         // Simple adaptation: increase delay if we're losing packets,
         // decrease if buffer is consistently full
 
@@ -310,6 +376,7 @@ impl JitterBuffer {
         self.packets.clear();
         self.next_play_sequence = None;
         self.current_delay_frames = self.config.initial_delay_frames;
+        self.mode = self.config.mode;
         self.jitter_estimate_ms = 0.0;
         self.packets_inserted = 0;
         self.packets_played = 0;
@@ -496,49 +563,51 @@ mod tests {
         assert_eq!(buffer.stats().packets_inserted, 0);
     }
 
+    /// Helper to create test config with overrides
+    fn test_config(
+        mode: JitterBufferMode,
+        min: u32,
+        max: u32,
+        initial: u32,
+        duration: f32,
+    ) -> JitterBufferConfig {
+        JitterBufferConfig {
+            mode,
+            min_delay_frames: min,
+            max_delay_frames: max,
+            initial_delay_frames: initial,
+            frame_duration_ms: duration,
+        }
+    }
+
     #[test]
-    fn test_config_validation() {
-        // Test that zero min_delay is allowed (passthrough mode)
-        let config = JitterBufferConfig {
-            min_delay_frames: 0,
-            max_delay_frames: 5,
-            initial_delay_frames: 0,
-            frame_duration_ms: 2.5,
-        };
+    fn test_config_validation_passthrough() {
+        let config = test_config(JitterBufferMode::Passthrough, 0, 5, 0, 2.5);
         let validated = config.validated();
         assert_eq!(
             validated.min_delay_frames, 0,
             "Zero should be allowed for passthrough mode"
         );
         assert_eq!(validated.initial_delay_frames, 0);
+    }
 
-        // Test that max_delay < min_delay is corrected
-        let config = JitterBufferConfig {
-            min_delay_frames: 5,
-            max_delay_frames: 2,
-            initial_delay_frames: 3,
-            frame_duration_ms: 2.5,
-        };
+    #[test]
+    fn test_config_validation_max_less_than_min() {
+        let config = test_config(JitterBufferMode::Adaptive, 5, 2, 3, 2.5);
         let validated = config.validated();
         assert!(validated.max_delay_frames >= validated.min_delay_frames);
+    }
 
-        // Test that initial_delay is clamped
-        let config = JitterBufferConfig {
-            min_delay_frames: 2,
-            max_delay_frames: 5,
-            initial_delay_frames: 10,
-            frame_duration_ms: 2.5,
-        };
+    #[test]
+    fn test_config_validation_initial_clamped() {
+        let config = test_config(JitterBufferMode::Adaptive, 2, 5, 10, 2.5);
         let validated = config.validated();
         assert!(validated.initial_delay_frames <= validated.max_delay_frames);
+    }
 
-        // Test that negative frame_duration is corrected
-        let config = JitterBufferConfig {
-            min_delay_frames: 1,
-            max_delay_frames: 5,
-            initial_delay_frames: 2,
-            frame_duration_ms: -1.0,
-        };
+    #[test]
+    fn test_config_validation_negative_duration() {
+        let config = test_config(JitterBufferMode::Adaptive, 1, 5, 2, -1.0);
         let validated = config.validated();
         assert!(validated.frame_duration_ms > 0.0);
     }

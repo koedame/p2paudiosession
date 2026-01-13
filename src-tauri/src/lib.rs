@@ -158,13 +158,17 @@ impl From<RoomInfo> for RoomInfoDto {
 }
 
 #[tauri::command]
-fn cmd_get_input_devices() -> Vec<DeviceInfo> {
-    list_input_devices().into_iter().map(Into::into).collect()
+fn cmd_get_input_devices() -> Result<Vec<DeviceInfo>, String> {
+    list_input_devices()
+        .map(|devices| devices.into_iter().map(Into::into).collect())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn cmd_get_output_devices() -> Vec<DeviceInfo> {
-    list_output_devices().into_iter().map(Into::into).collect()
+fn cmd_get_output_devices() -> Result<Vec<DeviceInfo>, String> {
+    list_output_devices()
+        .map(|devices| devices.into_iter().map(Into::into).collect())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

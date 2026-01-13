@@ -110,15 +110,29 @@ fn setup_logging(verbose: bool) {
 
 fn list_devices() {
     println!("Input devices:");
-    for device in list_input_devices() {
-        let default_marker = if device.is_default { " (default)" } else { "" };
-        println!("  - {}{}", device.name, default_marker);
+    match list_input_devices() {
+        Ok(devices) => {
+            for device in devices {
+                let default_marker = if device.is_default { " (default)" } else { "" };
+                println!("  - {}{}", device.name, default_marker);
+            }
+        }
+        Err(e) => {
+            println!("  Error: {}", e);
+        }
     }
 
     println!("\nOutput devices:");
-    for device in list_output_devices() {
-        let default_marker = if device.is_default { " (default)" } else { "" };
-        println!("  - {}{}", device.name, default_marker);
+    match list_output_devices() {
+        Ok(devices) => {
+            for device in devices {
+                let default_marker = if device.is_default { " (default)" } else { "" };
+                println!("  - {}{}", device.name, default_marker);
+            }
+        }
+        Err(e) => {
+            println!("  Error: {}", e);
+        }
     }
 }
 
@@ -229,7 +243,7 @@ async fn run_join(address: String, sample_rate: u32, frame_size: u32) -> Result<
                     tracing::warn!("Failed to send audio: {}", e);
                 } else {
                     packet_count += 1;
-                    if packet_count % 100 == 0 {
+                    if packet_count.is_multiple_of(100) {
                         tracing::debug!("Sent {} audio packets", packet_count);
                     }
                 }
@@ -248,7 +262,7 @@ async fn run_join(address: String, sample_rate: u32, frame_size: u32) -> Result<
             Some(samples) = rx_playback.recv() => {
                 audio_engine.enqueue_playback(&samples);
                 received_count += 1;
-                if received_count % 100 == 0 {
+                if received_count.is_multiple_of(100) {
                     tracing::debug!("Received {} audio packets for playback", received_count);
                 }
             }
@@ -293,7 +307,11 @@ async fn run_rooms(server: String) -> Result<()> {
             } else {
                 println!("Available rooms:");
                 for room in rooms {
-                    let password_str = if room.has_password { " (password protected)" } else { "" };
+                    let password_str = if room.has_password {
+                        " (password protected)"
+                    } else {
+                        ""
+                    };
                     println!(
                         "  {} - {} ({}/{} peers){}",
                         room.id, room.name, room.peer_count, room.max_peers, password_str
@@ -426,7 +444,7 @@ async fn run_join_room(
                         warn!("Failed to send audio: {}", e);
                     } else {
                         packet_count += 1;
-                        if packet_count % 100 == 0 {
+                        if packet_count.is_multiple_of(100) {
                             tracing::debug!("Sent {} audio packets", packet_count);
                         }
                     }
@@ -445,7 +463,7 @@ async fn run_join_room(
                 Some(samples) = rx_playback.recv() => {
                     audio_engine.enqueue_playback(&samples);
                     received_count += 1;
-                    if received_count % 100 == 0 {
+                    if received_count.is_multiple_of(100) {
                         tracing::debug!("Received {} audio packets for playback", received_count);
                     }
                 }

@@ -2,6 +2,8 @@
 
 use cpal::traits::{DeviceTrait, HostTrait};
 
+use super::error::AudioError;
+
 /// Unique identifier for an audio device
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DeviceId(pub String);
@@ -24,57 +26,71 @@ pub struct AudioDevice {
 }
 
 /// List available input (capture) devices
-pub fn list_input_devices() -> Vec<AudioDevice> {
+///
+/// Returns all available audio input devices on the system.
+///
+/// # Errors
+/// Returns `AudioError::DeviceOpenFailed` if device enumeration fails.
+pub fn list_input_devices() -> Result<Vec<AudioDevice>, AudioError> {
     let host = cpal::default_host();
     let default_device = host.default_input_device();
     let default_name = default_device.as_ref().and_then(|d| d.name().ok());
 
-    host.input_devices()
-        .map(|devices| {
-            devices
-                .filter_map(|device| {
-                    let name = device.name().ok()?;
-                    let is_default = default_name.as_ref() == Some(&name);
-                    let (sample_rates, channels) = get_device_capabilities(&device);
-                    Some(AudioDevice {
-                        id: DeviceId(name.clone()),
-                        name,
-                        supported_sample_rates: sample_rates,
-                        supported_channels: channels,
-                        is_default,
-                        is_asio: is_asio_device(&device),
-                    })
-                })
-                .collect()
+    let devices = host.input_devices().map_err(|e| {
+        AudioError::DeviceOpenFailed(format!("Failed to enumerate input devices: {}", e))
+    })?;
+
+    let result = devices
+        .filter_map(|device| {
+            let name = device.name().ok()?;
+            let is_default = default_name.as_ref() == Some(&name);
+            let (sample_rates, channels) = get_device_capabilities(&device);
+            Some(AudioDevice {
+                id: DeviceId(name.clone()),
+                name,
+                supported_sample_rates: sample_rates,
+                supported_channels: channels,
+                is_default,
+                is_asio: is_asio_device(&device),
+            })
         })
-        .unwrap_or_default()
+        .collect();
+
+    Ok(result)
 }
 
 /// List available output (playback) devices
-pub fn list_output_devices() -> Vec<AudioDevice> {
+///
+/// Returns all available audio output devices on the system.
+///
+/// # Errors
+/// Returns `AudioError::DeviceOpenFailed` if device enumeration fails.
+pub fn list_output_devices() -> Result<Vec<AudioDevice>, AudioError> {
     let host = cpal::default_host();
     let default_device = host.default_output_device();
     let default_name = default_device.as_ref().and_then(|d| d.name().ok());
 
-    host.output_devices()
-        .map(|devices| {
-            devices
-                .filter_map(|device| {
-                    let name = device.name().ok()?;
-                    let is_default = default_name.as_ref() == Some(&name);
-                    let (sample_rates, channels) = get_device_capabilities(&device);
-                    Some(AudioDevice {
-                        id: DeviceId(name.clone()),
-                        name,
-                        supported_sample_rates: sample_rates,
-                        supported_channels: channels,
-                        is_default,
-                        is_asio: is_asio_device(&device),
-                    })
-                })
-                .collect()
+    let devices = host.output_devices().map_err(|e| {
+        AudioError::DeviceOpenFailed(format!("Failed to enumerate output devices: {}", e))
+    })?;
+
+    let result = devices
+        .filter_map(|device| {
+            let name = device.name().ok()?;
+            let is_default = default_name.as_ref() == Some(&name);
+            let (sample_rates, channels) = get_device_capabilities(&device);
+            Some(AudioDevice {
+                id: DeviceId(name.clone()),
+                name,
+                supported_sample_rates: sample_rates,
+                supported_channels: channels,
+                is_default,
+                is_asio: is_asio_device(&device),
+            })
         })
-        .unwrap_or_default()
+        .collect();
+
+    Ok(result)
 }
 
 /// Get supported sample rates and channel counts for a device
@@ -139,7 +155,7 @@ mod tests {
     fn test_list_devices_does_not_panic() {
         // This test ensures device enumeration doesn't panic
         // Actual device availability depends on the system
-        let _inputs = list_input_devices();
-        let _outputs = list_output_devices();
+        let _inputs = list_input_devices().unwrap_or_default();
+        let _outputs = list_output_devices().unwrap_or_default();
     }
 }
