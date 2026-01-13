@@ -485,3 +485,7 @@ Adjusted frame size to keep latency under 150ms.
 ### 禁止事項
 - 機密情報（APIキー、トークン等）をコミットしない
 - 生成ファイル（build/, dist/ 等）をコミットしない（.gitignore で除外）
+
+### Git Push
+- `git push` ではなく `git push origin main` を使用する
+- 理由: このリポジトリは複数のupstream設定があり、`git push` だけではエラーになる
