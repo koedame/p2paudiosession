@@ -37,8 +37,6 @@
     "sampleRate": "Quality",
     "frameSize": "Responsiveness",
     "localMonitoring": "Hear Yourself",
-    "start": "Start Audio",
-    "stop": "Stop Audio",
     "default": "Default",
     "inputDeviceChanged": "Input device changed",
     "outputDeviceChanged": "Output device changed",

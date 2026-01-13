@@ -37,8 +37,6 @@
     "sampleRate": "音質",
     "frameSize": "反応速度",
     "localMonitoring": "自分の声を聞く",
-    "start": "オーディオ開始",
-    "stop": "オーディオ停止",
     "default": "デフォルト",
     "inputDeviceChanged": "入力デバイスを変更しました",
     "outputDeviceChanged": "出力デバイスを変更しました",

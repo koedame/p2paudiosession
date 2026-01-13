@@ -55,7 +55,6 @@ async function init(): Promise<void> {
   // Audio is auto-started by backend, update UI state
   const status = await invoke<SessionStatus>("cmd_get_session_status");
   state.audioRunning = status.audio_running;
-  updateAudioButtonState();
 
   // Listen for device disconnection events
   await listen<{ type: string; fallback: string | null }>(
@@ -325,10 +324,6 @@ function renderAudioPanel(): string {
         <input type="checkbox" id="local-monitor">
         <label for="local-monitor">${t("audio.localMonitoring")}</label>
       </div>
-      <div class="button-group">
-        <button id="btn-start-audio" class="btn btn-success">${t("audio.start")}</button>
-        <button id="btn-stop-audio" class="btn btn-danger" disabled>${t("audio.stop")}</button>
-      </div>
     </section>
   `;
 }
@@ -485,8 +480,6 @@ function cacheElements(): void {
     sampleRate: document.getElementById("sample-rate"),
     frameSize: document.getElementById("frame-size"),
     localMonitor: document.getElementById("local-monitor"),
-    btnStartAudio: document.getElementById("btn-start-audio"),
-    btnStopAudio: document.getElementById("btn-stop-audio"),
     mixerChannels: document.getElementById("mixer-channels"),
     muteLocal: document.getElementById("mute-local"),
     languageSelect: document.getElementById("language-select"),
@@ -620,8 +613,6 @@ function setupEventListeners(): void {
   });
 
   // Audio controls
-  elements.btnStartAudio?.addEventListener("click", startAudio);
-  elements.btnStopAudio?.addEventListener("click", stopAudio);
   (elements.localMonitor as HTMLInputElement)?.addEventListener(
     "change",
     toggleLocalMonitor
@@ -908,55 +899,6 @@ function copyInvite(): void {
   if (inviteInput) {
     navigator.clipboard.writeText(inviteInput.value);
     showToast(t("common.copied"), "success");
-  }
-}
-
-// Update audio button state to reflect current state
-function updateAudioButtonState(): void {
-  const startBtn = elements.btnStartAudio as HTMLButtonElement;
-  const stopBtn = elements.btnStopAudio as HTMLButtonElement;
-
-  if (startBtn) {
-    startBtn.disabled = state.audioRunning;
-  }
-  if (stopBtn) {
-    stopBtn.disabled = !state.audioRunning;
-  }
-}
-
-// Start audio
-async function startAudio(): Promise<void> {
-  try {
-    await updateAudioConfig();
-
-    const inputDevice =
-      (elements.inputDevice as HTMLSelectElement)?.value || undefined;
-    const outputDevice =
-      (elements.outputDevice as HTMLSelectElement)?.value || undefined;
-
-    await invoke("cmd_start_audio", { inputDevice, outputDevice });
-
-    state.audioRunning = true;
-    (elements.btnStartAudio as HTMLButtonElement).disabled = true;
-    (elements.btnStopAudio as HTMLButtonElement).disabled = false;
-    showToast(t("audio.start") + " OK", "success");
-  } catch (error) {
-    console.error("Failed to start audio:", error);
-    showToast(t("error.audioStartFailed") + ": " + error, "error");
-  }
-}
-
-// Stop audio
-async function stopAudio(): Promise<void> {
-  try {
-    await invoke("cmd_stop_audio");
-
-    state.audioRunning = false;
-    (elements.btnStartAudio as HTMLButtonElement).disabled = false;
-    (elements.btnStopAudio as HTMLButtonElement).disabled = true;
-    showToast(t("audio.stop") + " OK", "info");
-  } catch (error) {
-    console.error("Failed to stop audio:", error);
   }
 }
 
