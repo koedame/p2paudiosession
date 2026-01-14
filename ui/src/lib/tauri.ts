@@ -173,19 +173,65 @@ export async function audioGetCurrentDevices(): Promise<CurrentDevices> {
 // ============================================================================
 
 /**
+ * Network statistics
+ */
+export interface NetworkStats {
+  /** Round-trip time in milliseconds */
+  rtt_ms: number;
+  /** Jitter in milliseconds */
+  jitter_ms: number;
+  /** Packet loss percentage (0-100) */
+  packet_loss_percent: number;
+  /** Connection uptime in seconds */
+  uptime_seconds: number;
+  /** Total packets sent */
+  packets_sent: number;
+  /** Total packets received */
+  packets_received: number;
+  /** Total bytes sent */
+  bytes_sent: number;
+  /** Total bytes received */
+  bytes_received: number;
+}
+
+/**
+ * Latency component breakdown
+ */
+export interface LatencyComponent {
+  /** Component name */
+  name: string;
+  /** Latency in milliseconds */
+  ms: number;
+  /** Additional info (e.g., "128 samples @ 48000 Hz") */
+  info: string | null;
+}
+
+/**
+ * Detailed latency breakdown
+ */
+export interface DetailedLatency {
+  /** Upstream components (self -> peer) */
+  upstream: LatencyComponent[];
+  /** Upstream total in ms */
+  upstream_total_ms: number;
+  /** Downstream components (peer -> self) */
+  downstream: LatencyComponent[];
+  /** Downstream total in ms */
+  downstream_total_ms: number;
+  /** Round-trip total in ms */
+  roundtrip_total_ms: number;
+}
+
+/**
  * Streaming status information
  */
 export interface StreamingStatus {
   is_active: boolean;
   remote_addr: string | null;
-  /** Round-trip time in milliseconds (measured) */
-  rtt_ms: number | null;
-  /** Jitter in milliseconds (RTT variation) */
-  jitter_ms: number | null;
-  /** Upstream latency (self -> peer) in milliseconds */
-  upstream_latency_ms: number | null;
-  /** Downstream latency (peer -> self) in milliseconds */
-  downstream_latency_ms: number | null;
+  /** Network statistics */
+  network: NetworkStats | null;
+  /** Detailed latency breakdown */
+  latency: DetailedLatency | null;
 }
 
 /**
@@ -219,4 +265,24 @@ export async function streamingStop(): Promise<void> {
  */
 export async function streamingStatus(): Promise<StreamingStatus> {
   return invoke("streaming_status");
+}
+
+/**
+ * Set input device during streaming
+ * @param deviceId Device ID to use, or null for default device
+ */
+export async function streamingSetInputDevice(
+  deviceId: string | null
+): Promise<void> {
+  return invoke("streaming_set_input_device", { deviceId });
+}
+
+/**
+ * Set output device during streaming
+ * @param deviceId Device ID to use, or null for default device
+ */
+export async function streamingSetOutputDevice(
+  deviceId: string | null
+): Promise<void> {
+  return invoke("streaming_set_output_device", { deviceId });
 }

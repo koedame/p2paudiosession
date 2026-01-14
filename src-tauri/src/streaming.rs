@@ -13,7 +13,11 @@ use serde::Serialize;
 use tokio::sync::Mutex;
 
 use jamjam::audio::{AudioConfig, AudioEngine, DeviceId};
-use jamjam::network::{Connection, ConnectionStats};
+use jamjam::network::{Connection, ConnectionStats, LatencyBreakdown, LocalLatencyInfo};
+
+/// Audio configuration used for latency calculations
+const AUDIO_SAMPLE_RATE: u32 = 48000;
+const AUDIO_FRAME_SIZE: u32 = 128;
 
 /// Streaming state managed by Tauri
 pub struct StreamingState {
@@ -36,6 +40,11 @@ impl StreamingState {
             stats: Arc::new(RwLock::new(None)),
         }
     }
+
+    /// Get local latency info based on audio config
+    fn local_latency_info(&self) -> LocalLatencyInfo {
+        LocalLatencyInfo::from_audio_config(AUDIO_FRAME_SIZE, AUDIO_SAMPLE_RATE, "pcm")
+    }
 }
 
 impl Default for StreamingState {
@@ -47,6 +56,55 @@ impl Default for StreamingState {
 /// Commands sent to the audio thread
 enum StreamingCommand {
     Stop,
+    SetInputDevice(Option<String>),
+    SetOutputDevice(Option<String>),
+}
+
+/// Network statistics for IPC
+#[derive(Debug, Clone, Serialize)]
+pub struct NetworkStats {
+    /// Round-trip time in milliseconds
+    pub rtt_ms: f32,
+    /// Jitter in milliseconds
+    pub jitter_ms: f32,
+    /// Packet loss percentage (0-100)
+    pub packet_loss_percent: f32,
+    /// Connection uptime in seconds
+    pub uptime_seconds: u64,
+    /// Total packets sent
+    pub packets_sent: u64,
+    /// Total packets received
+    pub packets_received: u64,
+    /// Total bytes sent
+    pub bytes_sent: u64,
+    /// Total bytes received
+    pub bytes_received: u64,
+}
+
+/// Latency component breakdown for IPC
+#[derive(Debug, Clone, Serialize)]
+pub struct LatencyComponent {
+    /// Component name
+    pub name: String,
+    /// Latency in milliseconds
+    pub ms: f32,
+    /// Additional info (e.g., "128 samples @ 48000 Hz")
+    pub info: Option<String>,
+}
+
+/// Detailed latency breakdown for IPC
+#[derive(Debug, Clone, Serialize)]
+pub struct DetailedLatency {
+    /// Upstream components (self -> peer)
+    pub upstream: Vec<LatencyComponent>,
+    /// Upstream total in ms
+    pub upstream_total_ms: f32,
+    /// Downstream components (peer -> self)
+    pub downstream: Vec<LatencyComponent>,
+    /// Downstream total in ms
+    pub downstream_total_ms: f32,
+    /// Round-trip total in ms
+    pub roundtrip_total_ms: f32,
 }
 
 /// Streaming status for IPC
@@ -54,16 +112,10 @@ enum StreamingCommand {
 pub struct StreamingStatus {
     pub is_active: bool,
     pub remote_addr: Option<String>,
-    /// Round-trip time in milliseconds (measured)
-    pub rtt_ms: Option<f32>,
-    /// Jitter in milliseconds (RTT variation)
-    pub jitter_ms: Option<f32>,
-    /// Upstream latency (self -> peer) in milliseconds
-    /// Approximated as RTT/2 (assumes symmetric network)
-    pub upstream_latency_ms: Option<f32>,
-    /// Downstream latency (peer -> self) in milliseconds
-    /// Approximated as RTT/2 (assumes symmetric network)
-    pub downstream_latency_ms: Option<f32>,
+    /// Network statistics
+    pub network: Option<NetworkStats>,
+    /// Detailed latency breakdown
+    pub latency: Option<DetailedLatency>,
 }
 
 /// Start audio streaming to a remote peer
@@ -102,6 +154,9 @@ pub async fn streaming_start(
     let is_active = state.is_active.clone();
     let shared_stats = state.stats.clone();
 
+    // Mark as active BEFORE spawning thread to avoid race condition
+    state.is_active.store(true, Ordering::SeqCst);
+
     // Spawn audio thread
     thread::spawn(move || {
         // Create tokio runtime for this thread
@@ -130,9 +185,6 @@ pub async fn streaming_start(
             }
         });
     });
-
-    // Mark as active
-    state.is_active.store(true, Ordering::SeqCst);
 
     Ok(())
 }
@@ -184,17 +236,124 @@ pub async fn streaming_status(
     let remote_addr = state.remote_addr.lock().await.clone();
     let stats = state.stats.read().ok().and_then(|s| s.clone());
 
-    // Calculate one-way latency as RTT/2 (assuming symmetric network)
-    let one_way_latency = stats.as_ref().map(|s| s.rtt_ms / 2.0);
+    let (network, latency) = if let Some(ref s) = stats {
+        let local_info = state.local_latency_info();
+        let breakdown = LatencyBreakdown::calculate(&local_info, None, s.rtt_ms, s.jitter_ms);
+
+        let network = NetworkStats {
+            rtt_ms: s.rtt_ms,
+            jitter_ms: s.jitter_ms,
+            packet_loss_percent: s.packet_loss_rate * 100.0,
+            uptime_seconds: s.uptime_seconds,
+            packets_sent: s.packets_sent,
+            packets_received: s.packets_received,
+            bytes_sent: s.bytes_sent,
+            bytes_received: s.bytes_received,
+        };
+
+        let upstream = vec![
+            LatencyComponent {
+                name: "Capture buffer".to_string(),
+                ms: breakdown.upstream.capture_buffer_ms,
+                info: Some(format!(
+                    "{} samples @ {} Hz",
+                    AUDIO_FRAME_SIZE, AUDIO_SAMPLE_RATE
+                )),
+            },
+            LatencyComponent {
+                name: "Encode (pcm)".to_string(),
+                ms: breakdown.upstream.encode_ms,
+                info: None,
+            },
+            LatencyComponent {
+                name: "Network".to_string(),
+                ms: breakdown.upstream.network_ms,
+                info: Some("RTT/2".to_string()),
+            },
+        ];
+
+        let downstream = vec![
+            LatencyComponent {
+                name: "Network".to_string(),
+                ms: breakdown.downstream.network_ms,
+                info: Some("RTT/2".to_string()),
+            },
+            LatencyComponent {
+                name: "Jitter buffer".to_string(),
+                ms: breakdown.downstream.jitter_buffer_ms,
+                info: None,
+            },
+            LatencyComponent {
+                name: "Decode (pcm)".to_string(),
+                ms: breakdown.downstream.decode_ms,
+                info: None,
+            },
+            LatencyComponent {
+                name: "Playback buffer".to_string(),
+                ms: breakdown.downstream.playback_buffer_ms,
+                info: Some(format!("{} samples", AUDIO_FRAME_SIZE)),
+            },
+        ];
+
+        let latency = DetailedLatency {
+            upstream,
+            upstream_total_ms: breakdown.upstream_total_ms,
+            downstream,
+            downstream_total_ms: breakdown.downstream_total_ms,
+            roundtrip_total_ms: breakdown.roundtrip_total_ms,
+        };
+
+        (Some(network), Some(latency))
+    } else {
+        (None, None)
+    };
 
     Ok(StreamingStatus {
         is_active,
         remote_addr,
-        rtt_ms: stats.as_ref().map(|s| s.rtt_ms),
-        jitter_ms: stats.as_ref().map(|s| s.jitter_ms),
-        upstream_latency_ms: one_way_latency,
-        downstream_latency_ms: one_way_latency,
+        network,
+        latency,
     })
+}
+
+/// Set input device during streaming
+#[tauri::command]
+pub async fn streaming_set_input_device(
+    device_id: Option<String>,
+    state: tauri::State<'_, StreamingState>,
+) -> Result<(), String> {
+    if !state.is_active.load(Ordering::SeqCst) {
+        return Err("Streaming is not active".to_string());
+    }
+
+    let tx = state.cmd_tx.lock().await;
+    if let Some(ref sender) = *tx {
+        sender
+            .send(StreamingCommand::SetInputDevice(device_id))
+            .map_err(|e| format!("Failed to send command: {}", e))?;
+    }
+
+    Ok(())
+}
+
+/// Set output device during streaming
+#[tauri::command]
+pub async fn streaming_set_output_device(
+    device_id: Option<String>,
+    state: tauri::State<'_, StreamingState>,
+) -> Result<(), String> {
+    if !state.is_active.load(Ordering::SeqCst) {
+        return Err("Streaming is not active".to_string());
+    }
+
+    let tx = state.cmd_tx.lock().await;
+    if let Some(ref sender) = *tx {
+        sender
+            .send(StreamingCommand::SetOutputDevice(device_id))
+            .map_err(|e| format!("Failed to send command: {}", e))?;
+    }
+
+    Ok(())
 }
 
 /// Run audio streaming in the audio thread
@@ -227,6 +386,9 @@ async fn run_audio_streaming(
     // Create channels for audio data
     let (tx_capture, mut rx_capture) = tokio::sync::mpsc::channel::<(Vec<f32>, u32)>(64);
     let (tx_playback, mut rx_playback) = tokio::sync::mpsc::channel::<Vec<f32>>(64);
+
+    // Keep a clone for device switching
+    let tx_capture_for_switch = tx_capture.clone();
 
     // Start audio capture
     audio_engine
@@ -278,11 +440,31 @@ async fn run_audio_streaming(
     // Main loop: process received audio and check for stop command
     let mut stats_update_counter = 0u32;
     loop {
-        // Check for stop command (non-blocking)
+        // Check for commands (non-blocking)
         match cmd_rx.try_recv() {
             Ok(StreamingCommand::Stop) => {
                 println!("Stopping streaming...");
                 break;
+            }
+            Ok(StreamingCommand::SetInputDevice(device_id)) => {
+                println!("Switching input device to: {:?}", device_id);
+                let new_device_id = device_id.map(DeviceId);
+                let tx_clone = tx_capture_for_switch.clone();
+                if let Err(e) = audio_engine.set_input_device(
+                    new_device_id.as_ref(),
+                    move |samples, timestamp| {
+                        let _ = tx_clone.try_send((samples.to_vec(), timestamp as u32));
+                    },
+                ) {
+                    eprintln!("Failed to switch input device: {}", e);
+                }
+            }
+            Ok(StreamingCommand::SetOutputDevice(device_id)) => {
+                println!("Switching output device to: {:?}", device_id);
+                let new_device_id = device_id.map(DeviceId);
+                if let Err(e) = audio_engine.set_output_device(new_device_id.as_ref()) {
+                    eprintln!("Failed to switch output device: {}", e);
+                }
             }
             Err(std_mpsc::TryRecvError::Disconnected) => {
                 println!("Command channel disconnected");

@@ -38,6 +38,8 @@ pub fn run() {
             streaming::streaming_start,
             streaming::streaming_stop,
             streaming::streaming_status,
+            streaming::streaming_set_input_device,
+            streaming::streaming_set_output_device,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

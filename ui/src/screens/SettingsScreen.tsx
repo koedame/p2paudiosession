@@ -10,6 +10,9 @@ import {
   audioSetInputDevice,
   audioSetOutputDevice,
   audioGetCurrentDevices,
+  streamingStatus,
+  streamingSetInputDevice,
+  streamingSetOutputDevice,
 } from "../lib/tauri";
 import { DeviceSelector } from "../components/DeviceSelector";
 import "./SettingsScreen.css";
@@ -41,8 +44,25 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
 
         setInputDevices(inputs);
         setOutputDevices(outputs);
-        setSelectedInputId(current.input_device_id);
-        setSelectedOutputId(current.output_device_id);
+
+        // If no device is selected, use the default device and save it
+        let inputId = current.input_device_id;
+        let outputId = current.output_device_id;
+
+        if (!inputId && inputs.length > 0) {
+          const defaultInput = inputs.find((d) => d.is_default) || inputs[0];
+          inputId = defaultInput.id;
+          await audioSetInputDevice(inputId);
+        }
+
+        if (!outputId && outputs.length > 0) {
+          const defaultOutput = outputs.find((d) => d.is_default) || outputs[0];
+          outputId = defaultOutput.id;
+          await audioSetOutputDevice(outputId);
+        }
+
+        setSelectedInputId(inputId);
+        setSelectedOutputId(outputId);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
@@ -56,8 +76,19 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
   const handleInputChange = async (deviceId: string) => {
     try {
       setError(null);
+      // Always save to AudioState
       await audioSetInputDevice(deviceId);
       setSelectedInputId(deviceId);
+
+      // If streaming is active, also update the running stream
+      try {
+        const status = await streamingStatus();
+        if (status.is_active) {
+          await streamingSetInputDevice(deviceId);
+        }
+      } catch {
+        // Ignore errors from streaming status check
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -66,8 +97,19 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
   const handleOutputChange = async (deviceId: string) => {
     try {
       setError(null);
+      // Always save to AudioState
       await audioSetOutputDevice(deviceId);
       setSelectedOutputId(deviceId);
+
+      // If streaming is active, also update the running stream
+      try {
+        const status = await streamingStatus();
+        if (status.is_active) {
+          await streamingSetOutputDevice(deviceId);
+        }
+      } catch {
+        // Ignore errors from streaming status check
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }

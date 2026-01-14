@@ -7,6 +7,7 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { ConnectionIndicator } from "../components/ConnectionIndicator";
+import { SessionStats } from "../components/SessionStats";
 import {
   signalingConnect,
   signalingDisconnect,
@@ -20,6 +21,8 @@ import {
   audioGetCurrentDevices,
   type RoomInfo,
   type PeerInfo,
+  type NetworkStats,
+  type DetailedLatency,
 } from "../lib/tauri";
 import "./MainScreen.css";
 
@@ -44,8 +47,8 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
   const [connectionId, setConnectionId] = useState<number | null>(null);
   const [peerName, setPeerName] = useState("User");
   const [roomName, setRoomName] = useState("");
-  const [upstreamLatencyMs, setUpstreamLatencyMs] = useState<number | null>(null);
-  const [downstreamLatencyMs, setDownstreamLatencyMs] = useState<number | null>(null);
+  const [networkStats, setNetworkStats] = useState<NetworkStats | null>(null);
+  const [detailedLatency, setDetailedLatency] = useState<DetailedLatency | null>(null);
 
   // Update html lang attribute when language changes
   useEffect(() => {
@@ -64,17 +67,17 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
   // Poll streaming status for latency when connected
   useEffect(() => {
     if (sessionState.status !== "connected") {
-      setUpstreamLatencyMs(null);
-      setDownstreamLatencyMs(null);
+      setNetworkStats(null);
+      setDetailedLatency(null);
       return;
     }
 
-    const pollLatency = async () => {
+    const pollStats = async () => {
       try {
         const status = await streamingStatus();
         if (status.is_active) {
-          setUpstreamLatencyMs(status.upstream_latency_ms);
-          setDownstreamLatencyMs(status.downstream_latency_ms);
+          setNetworkStats(status.network);
+          setDetailedLatency(status.latency);
         }
       } catch (e) {
         console.error("Failed to get streaming status:", e);
@@ -82,10 +85,10 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
     };
 
     // Initial poll
-    pollLatency();
+    pollStats();
 
     // Poll every 500ms
-    const interval = setInterval(pollLatency, 500);
+    const interval = setInterval(pollStats, 500);
 
     return () => clearInterval(interval);
   }, [sessionState.status]);
@@ -400,8 +403,8 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
         <div className="main-status">
           <ConnectionIndicator
             status="connected"
-            upstreamLatencyMs={upstreamLatencyMs ?? undefined}
-            downstreamLatencyMs={downstreamLatencyMs ?? undefined}
+            upstreamLatencyMs={detailedLatency?.upstream_total_ms}
+            downstreamLatencyMs={detailedLatency?.downstream_total_ms}
             size="lg"
           />
         </div>
@@ -461,6 +464,9 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
             {t("session.leave.button")}
           </button>
         </div>
+
+        {/* Detailed Session Statistics */}
+        <SessionStats network={networkStats} latency={detailedLatency} />
       </>
     );
   };

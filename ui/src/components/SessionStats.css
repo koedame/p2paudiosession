@@ -1,0 +1,137 @@
+/**
+ * SessionStats Component Styles
+ */
+
+.session-stats {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+}
+
+.session-stats--empty {
+  text-align: center;
+  color: var(--color-text-secondary);
+  padding: var(--space-xl);
+}
+
+.session-stats__section {
+  margin-bottom: var(--space-md);
+}
+
+.session-stats__section:last-child {
+  margin-bottom: 0;
+}
+
+.session-stats__section-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 var(--space-sm) 0;
+  padding-bottom: var(--space-xs);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.session-stats__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-xs) var(--space-md);
+}
+
+.session-stats__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.session-stats__label {
+  color: var(--color-text-secondary);
+}
+
+.session-stats__value {
+  font-weight: 500;
+  text-align: right;
+}
+
+.session-stats__value--highlight {
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+/* Latency Groups */
+.session-stats__latency-group {
+  margin-bottom: var(--space-sm);
+}
+
+.session-stats__latency-group:last-child {
+  margin-bottom: 0;
+}
+
+.session-stats__latency-title {
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  margin: 0 0 var(--space-xs) 0;
+}
+
+.session-stats__latency-items {
+  background-color: var(--color-bg-tertiary);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm);
+}
+
+.session-stats__latency-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: var(--space-xs) 0;
+}
+
+.session-stats__latency-item:first-child {
+  padding-top: 0;
+}
+
+.session-stats__latency-item:last-child {
+  padding-bottom: 0;
+}
+
+.session-stats__latency-item--total {
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-xs);
+  padding-top: var(--space-sm);
+  font-weight: 600;
+}
+
+.session-stats__latency-name {
+  color: var(--color-text-secondary);
+}
+
+.session-stats__latency-value {
+  text-align: right;
+}
+
+.session-stats__latency-info {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  margin-left: var(--space-xs);
+}
+
+/* Summary */
+.session-stats__summary {
+  display: flex;
+  justify-content: space-around;
+  background-color: var(--color-bg-tertiary);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm);
+}
+
+.session-stats__summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+}
