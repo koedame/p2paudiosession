@@ -14,7 +14,11 @@ import {
   signalingJoinRoom,
   signalingLeaveRoom,
   signalingCreateRoom,
+  streamingStart,
+  streamingStop,
+  streamingStatus,
   type RoomInfo,
+  type PeerInfo,
 } from "../lib/tauri";
 import "./MainScreen.css";
 
@@ -28,13 +32,18 @@ type SessionState =
   | { status: "connected"; roomCode: string; participants: string[] }
   | { status: "error"; message: string };
 
-export function MainScreen() {
+export interface MainScreenProps {
+  onSettingsClick?: () => void;
+}
+
+export function MainScreen({ onSettingsClick }: MainScreenProps) {
   const { t, i18n } = useTranslation();
   const [sessionState, setSessionState] = useState<SessionState>({ status: "idle" });
   const [serverUrl, setServerUrl] = useState("ws://localhost:8080");
   const [connectionId, setConnectionId] = useState<number | null>(null);
   const [peerName, setPeerName] = useState("User");
   const [roomName, setRoomName] = useState("");
+  const [latencyMs, setLatencyMs] = useState<number | null>(null);
 
   // Update html lang attribute when language changes
   useEffect(() => {
@@ -49,6 +58,33 @@ export function MainScreen() {
       }
     };
   }, [connectionId]);
+
+  // Poll streaming status for latency when connected
+  useEffect(() => {
+    if (sessionState.status !== "connected") {
+      setLatencyMs(null);
+      return;
+    }
+
+    const pollLatency = async () => {
+      try {
+        const status = await streamingStatus();
+        if (status.is_active && status.rtt_ms !== null) {
+          setLatencyMs(status.rtt_ms);
+        }
+      } catch (e) {
+        console.error("Failed to get streaming status:", e);
+      }
+    };
+
+    // Initial poll
+    pollLatency();
+
+    // Poll every 500ms
+    const interval = setInterval(pollLatency, 500);
+
+    return () => clearInterval(interval);
+  }, [sessionState.status]);
 
   // Handle server connection
   const handleConnectServer = async () => {
@@ -134,6 +170,22 @@ export function MainScreen() {
         roomCode: result.room_id,
         participants: result.peers.map((p) => p.name),
       });
+
+      // Start streaming if there's a peer with an address (e.g., echobot)
+      const peerWithAddr = result.peers.find(
+        (p: PeerInfo) => p.public_addr || p.local_addr
+      );
+      if (peerWithAddr) {
+        const addr = peerWithAddr.public_addr || peerWithAddr.local_addr;
+        if (addr) {
+          try {
+            await streamingStart(addr);
+            console.log("Streaming started to:", addr);
+          } catch (streamErr) {
+            console.error("Failed to start streaming:", streamErr);
+          }
+        }
+      }
     } catch (e) {
       setSessionState({
         status: "error",
@@ -147,6 +199,14 @@ export function MainScreen() {
     if (connectionId === null) return;
 
     try {
+      // Stop streaming first
+      try {
+        await streamingStop();
+        console.log("Streaming stopped");
+      } catch (streamErr) {
+        console.error("Failed to stop streaming:", streamErr);
+      }
+
       await signalingLeaveRoom(connectionId);
       const rooms = await signalingListRooms(connectionId);
       setSessionState({ status: "server_connected", rooms });
@@ -160,8 +220,7 @@ export function MainScreen() {
 
   // Handle settings click
   const handleSettingsClick = () => {
-    // TODO: Navigate to settings screen
-    console.log("Settings clicked");
+    onSettingsClick?.();
   };
 
   // Render idle (disconnected from server) state
@@ -329,7 +388,7 @@ export function MainScreen() {
     return (
       <>
         <div className="main-status">
-          <ConnectionIndicator status="connected" latencyMs={15} size="lg" />
+          <ConnectionIndicator status="connected" latencyMs={latencyMs ?? undefined} size="lg" />
         </div>
 
         <div className="main-card">

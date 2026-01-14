@@ -1,0 +1,68 @@
+/**
+ * DeviceSelector styles
+ */
+
+.device-selector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-xs);
+}
+
+.device-selector__label {
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+.device-selector__wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.device-selector__select {
+  width: 100%;
+  padding: var(--padding-input);
+  padding-right: var(--space-xl);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-body);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  appearance: none;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.device-selector__select:hover:not(:disabled) {
+  border-color: var(--color-border-hover);
+}
+
+.device-selector__select:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: var(--shadow-focus);
+}
+
+.device-selector__select:disabled {
+  color: var(--color-text-disabled);
+  background-color: var(--color-bg-elevated);
+  cursor: not-allowed;
+}
+
+.device-selector__arrow {
+  position: absolute;
+  right: var(--space-sm);
+  color: var(--color-text-secondary);
+  pointer-events: none;
+  font-size: var(--font-size-caption);
+}
+
+.device-selector__select:disabled + .device-selector__arrow {
+  color: var(--color-text-disabled);
+}

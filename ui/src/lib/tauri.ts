@@ -99,3 +99,120 @@ export async function signalingCreateRoom(
 ): Promise<JoinResult> {
   return invoke("signaling_create_room", { connId, roomName, peerName });
 }
+
+// ============================================================================
+// Audio Device API
+// ============================================================================
+
+/**
+ * Audio device information
+ */
+export interface AudioDeviceInfo {
+  id: string;
+  name: string;
+  supported_sample_rates: number[];
+  supported_channels: number[];
+  is_default: boolean;
+  is_asio: boolean;
+}
+
+/**
+ * Current device selection
+ */
+export interface CurrentDevices {
+  input_device_id: string | null;
+  output_device_id: string | null;
+}
+
+/**
+ * List available input (microphone) devices
+ * @returns Array of input device information
+ */
+export async function audioListInputDevices(): Promise<AudioDeviceInfo[]> {
+  return invoke("audio_list_input_devices");
+}
+
+/**
+ * List available output (speaker) devices
+ * @returns Array of output device information
+ */
+export async function audioListOutputDevices(): Promise<AudioDeviceInfo[]> {
+  return invoke("audio_list_output_devices");
+}
+
+/**
+ * Set the input device
+ * @param deviceId Device ID to use, or null for default device
+ */
+export async function audioSetInputDevice(
+  deviceId: string | null
+): Promise<void> {
+  return invoke("audio_set_input_device", { deviceId });
+}
+
+/**
+ * Set the output device
+ * @param deviceId Device ID to use, or null for default device
+ */
+export async function audioSetOutputDevice(
+  deviceId: string | null
+): Promise<void> {
+  return invoke("audio_set_output_device", { deviceId });
+}
+
+/**
+ * Get current device selection
+ * @returns Current input and output device IDs
+ */
+export async function audioGetCurrentDevices(): Promise<CurrentDevices> {
+  return invoke("audio_get_current_devices");
+}
+
+// ============================================================================
+// Streaming API
+// ============================================================================
+
+/**
+ * Streaming status information
+ */
+export interface StreamingStatus {
+  is_active: boolean;
+  remote_addr: string | null;
+  /** Round-trip time in milliseconds (measured) */
+  rtt_ms: number | null;
+  /** Jitter in milliseconds (RTT variation) */
+  jitter_ms: number | null;
+}
+
+/**
+ * Start audio streaming to a remote peer
+ * @param remoteAddr Remote address in format "ip:port"
+ * @param inputDeviceId Optional input device ID
+ * @param outputDeviceId Optional output device ID
+ */
+export async function streamingStart(
+  remoteAddr: string,
+  inputDeviceId?: string,
+  outputDeviceId?: string
+): Promise<void> {
+  return invoke("streaming_start", {
+    remoteAddr,
+    inputDeviceId: inputDeviceId ?? null,
+    outputDeviceId: outputDeviceId ?? null,
+  });
+}
+
+/**
+ * Stop audio streaming
+ */
+export async function streamingStop(): Promise<void> {
+  return invoke("streaming_stop");
+}
+
+/**
+ * Get streaming status
+ * @returns Current streaming status
+ */
+export async function streamingStatus(): Promise<StreamingStatus> {
+  return invoke("streaming_status");
+}

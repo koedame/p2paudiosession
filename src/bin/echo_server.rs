@@ -24,7 +24,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn, Level};
 
 use jamjam::network::{SignalingClient, SignalingConnection, SignalingMessage, UdpTransport};
-use jamjam::protocol::{Packet, PacketType};
+use jamjam::protocol::{LatencyPing, LatencyPong, Packet, PacketType};
 
 /// Echo server for jamjam P2P audio testing
 #[derive(Parser, Debug)]
@@ -274,6 +274,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 // Echo keep-alive immediately
                                 if let Err(e) = transport.send_to(&packet, sender).await {
                                     warn!("Failed to echo keep-alive to {}: {}", sender, e);
+                                }
+                            }
+                            PacketType::LatencyPing => {
+                                // Respond with pong for RTT measurement
+                                if let Some(ping) = LatencyPing::from_bytes(&packet.payload) {
+                                    let pong = LatencyPong {
+                                        original_sent_time_us: ping.sent_time_us,
+                                        ping_sequence: ping.ping_sequence,
+                                    };
+                                    let pong_packet = Packet::latency_pong(packet.sequence, &pong);
+                                    if let Err(e) = transport.send_to(&pong_packet, sender).await {
+                                        warn!("Failed to send latency pong to {}: {}", sender, e);
+                                    }
+                                    debug!("Sent latency pong seq={} to {}", ping.ping_sequence, sender);
                                 }
                             }
                             _ => {
