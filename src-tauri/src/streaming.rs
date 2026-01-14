@@ -58,6 +58,12 @@ pub struct StreamingStatus {
     pub rtt_ms: Option<f32>,
     /// Jitter in milliseconds (RTT variation)
     pub jitter_ms: Option<f32>,
+    /// Upstream latency (self -> peer) in milliseconds
+    /// Approximated as RTT/2 (assumes symmetric network)
+    pub upstream_latency_ms: Option<f32>,
+    /// Downstream latency (peer -> self) in milliseconds
+    /// Approximated as RTT/2 (assumes symmetric network)
+    pub downstream_latency_ms: Option<f32>,
 }
 
 /// Start audio streaming to a remote peer
@@ -178,11 +184,16 @@ pub async fn streaming_status(
     let remote_addr = state.remote_addr.lock().await.clone();
     let stats = state.stats.read().ok().and_then(|s| s.clone());
 
+    // Calculate one-way latency as RTT/2 (assuming symmetric network)
+    let one_way_latency = stats.as_ref().map(|s| s.rtt_ms / 2.0);
+
     Ok(StreamingStatus {
         is_active,
         remote_addr,
         rtt_ms: stats.as_ref().map(|s| s.rtt_ms),
         jitter_ms: stats.as_ref().map(|s| s.jitter_ms),
+        upstream_latency_ms: one_way_latency,
+        downstream_latency_ms: one_way_latency,
     })
 }
 

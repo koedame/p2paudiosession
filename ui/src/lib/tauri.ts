@@ -182,6 +182,10 @@ export interface StreamingStatus {
   rtt_ms: number | null;
   /** Jitter in milliseconds (RTT variation) */
   jitter_ms: number | null;
+  /** Upstream latency (self -> peer) in milliseconds */
+  upstream_latency_ms: number | null;
+  /** Downstream latency (peer -> self) in milliseconds */
+  downstream_latency_ms: number | null;
 }
 
 /**

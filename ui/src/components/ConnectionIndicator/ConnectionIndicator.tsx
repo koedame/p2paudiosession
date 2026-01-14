@@ -25,8 +25,14 @@ export interface ConnectionIndicatorProps {
   /** Connection status */
   status: ConnectionStatus;
 
-  /** RTT (round-trip time) in milliseconds */
+  /** RTT (round-trip time) in milliseconds (deprecated, use upstreamLatencyMs/downstreamLatencyMs) */
   latencyMs?: number;
+
+  /** Upstream latency (self -> peer) in milliseconds */
+  upstreamLatencyMs?: number;
+
+  /** Downstream latency (peer -> self) in milliseconds */
+  downstreamLatencyMs?: number;
 
   /** Whether to show latency value */
   showLatency?: boolean;
@@ -64,6 +70,8 @@ function getIcon(status: ConnectionStatus, size: number) {
 export function ConnectionIndicator({
   status,
   latencyMs,
+  upstreamLatencyMs,
+  downstreamLatencyMs,
   showLatency = true,
   size = 'md',
   onClick,
@@ -71,10 +79,18 @@ export function ConnectionIndicator({
   const { t } = useTranslation();
 
   const statusText = t(`status.${status}`);
-  const latencyText =
-    showLatency && latencyMs !== undefined
-      ? t('status.latency', { ms: latencyMs })
-      : null;
+
+  // Build latency text: prefer upstream/downstream if available
+  let latencyText: string | null = null;
+  if (showLatency) {
+    if (upstreamLatencyMs !== undefined && downstreamLatencyMs !== undefined) {
+      // Show both directions: "↑12ms ↓12ms"
+      latencyText = `↑${Math.round(upstreamLatencyMs)}ms ↓${Math.round(downstreamLatencyMs)}ms`;
+    } else if (latencyMs !== undefined) {
+      // Fallback to single RTT value
+      latencyText = t('status.latency', { ms: Math.round(latencyMs) });
+    }
+  }
 
   // Build aria-label for screen readers
   const ariaLabel = latencyText

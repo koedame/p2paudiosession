@@ -17,6 +17,7 @@ import {
   streamingStart,
   streamingStop,
   streamingStatus,
+  audioGetCurrentDevices,
   type RoomInfo,
   type PeerInfo,
 } from "../lib/tauri";
@@ -43,7 +44,8 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
   const [connectionId, setConnectionId] = useState<number | null>(null);
   const [peerName, setPeerName] = useState("User");
   const [roomName, setRoomName] = useState("");
-  const [latencyMs, setLatencyMs] = useState<number | null>(null);
+  const [upstreamLatencyMs, setUpstreamLatencyMs] = useState<number | null>(null);
+  const [downstreamLatencyMs, setDownstreamLatencyMs] = useState<number | null>(null);
 
   // Update html lang attribute when language changes
   useEffect(() => {
@@ -62,15 +64,17 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
   // Poll streaming status for latency when connected
   useEffect(() => {
     if (sessionState.status !== "connected") {
-      setLatencyMs(null);
+      setUpstreamLatencyMs(null);
+      setDownstreamLatencyMs(null);
       return;
     }
 
     const pollLatency = async () => {
       try {
         const status = await streamingStatus();
-        if (status.is_active && status.rtt_ms !== null) {
-          setLatencyMs(status.rtt_ms);
+        if (status.is_active) {
+          setUpstreamLatencyMs(status.upstream_latency_ms);
+          setDownstreamLatencyMs(status.downstream_latency_ms);
         }
       } catch (e) {
         console.error("Failed to get streaming status:", e);
@@ -179,8 +183,14 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
         const addr = peerWithAddr.public_addr || peerWithAddr.local_addr;
         if (addr) {
           try {
-            await streamingStart(addr);
-            console.log("Streaming started to:", addr);
+            // Get currently selected devices from settings
+            const devices = await audioGetCurrentDevices();
+            await streamingStart(
+              addr,
+              devices.input_device_id ?? undefined,
+              devices.output_device_id ?? undefined
+            );
+            console.log("Streaming started to:", addr, "with devices:", devices);
           } catch (streamErr) {
             console.error("Failed to start streaming:", streamErr);
           }
@@ -388,7 +398,12 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
     return (
       <>
         <div className="main-status">
-          <ConnectionIndicator status="connected" latencyMs={latencyMs ?? undefined} size="lg" />
+          <ConnectionIndicator
+            status="connected"
+            upstreamLatencyMs={upstreamLatencyMs ?? undefined}
+            downstreamLatencyMs={downstreamLatencyMs ?? undefined}
+            size="lg"
+          />
         </div>
 
         <div className="main-card">
