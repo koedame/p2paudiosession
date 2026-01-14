@@ -6,6 +6,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
 import { ConnectionIndicator, type ConnectionStatus } from './ConnectionIndicator';
 
 // Mock i18next
@@ -37,7 +38,7 @@ describe('ConnectionIndicator', () => {
   ];
 
   describe('Status Display', () => {
-    it.each(statuses)('displays correct text for %s status', (status) => {
+    it.each(statuses)('displays correct text for %s status', (status: ConnectionStatus) => {
       render(<ConnectionIndicator status={status} />);
       const element = screen.getByRole('status');
       expect(element).toBeInTheDocument();
@@ -197,7 +198,7 @@ describe('ConnectionIndicator', () => {
   });
 
   describe('CSS Classes', () => {
-    it.each(statuses)('applies correct status class for %s', (status) => {
+    it.each(statuses)('applies correct status class for %s', (status: ConnectionStatus) => {
       render(<ConnectionIndicator status={status} />);
       const element = screen.getByRole('status');
       expect(element.className).toContain(`connection-indicator--${status}`);

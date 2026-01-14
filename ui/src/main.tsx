@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import Catalog from "./Catalog";
 
 // Import i18n (must be imported before App)
 import "./i18n";
@@ -8,8 +9,11 @@ import "./i18n";
 // Import design tokens
 import "./styles/tokens.css";
 
+// Check if catalog mode is enabled via environment variable
+const isCatalogMode = import.meta.env.VITE_CATALOG_MODE === "true";
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    {isCatalogMode ? <Catalog /> : <App />}
   </React.StrictMode>
 );

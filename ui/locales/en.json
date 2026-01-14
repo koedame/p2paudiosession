@@ -11,7 +11,8 @@
     },
     "label": {
       "loading": "Loading...",
-      "required": "Required"
+      "required": "Required",
+      "or": "or"
     }
   },
   "session": {
