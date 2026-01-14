@@ -7,12 +7,37 @@
       "next": "Next",
       "save": "Save",
       "retry": "Retry",
-      "close": "Close"
+      "close": "Close",
+      "refresh": "Refresh"
     },
     "label": {
       "loading": "Loading...",
       "required": "Required",
       "or": "or"
+    }
+  },
+  "signaling": {
+    "server": {
+      "label": "Signaling Server"
+    },
+    "peer": {
+      "name": "Your Name"
+    },
+    "connect": {
+      "button": "Connect"
+    },
+    "disconnect": {
+      "button": "Disconnect"
+    },
+    "connecting": "Connecting to server...",
+    "connected": "Connected to server",
+    "rooms": {
+      "title": "Available Rooms",
+      "empty": "No rooms available"
+    },
+    "room": {
+      "name": "Room Name",
+      "placeholder": "My Room"
     }
   },
   "session": {

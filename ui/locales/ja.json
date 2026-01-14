@@ -7,12 +7,37 @@
       "next": "次へ",
       "save": "保存",
       "retry": "再試行",
-      "close": "閉じる"
+      "close": "閉じる",
+      "refresh": "更新"
     },
     "label": {
       "loading": "読み込み中...",
       "required": "必須",
       "or": "または"
+    }
+  },
+  "signaling": {
+    "server": {
+      "label": "シグナリングサーバー"
+    },
+    "peer": {
+      "name": "表示名"
+    },
+    "connect": {
+      "button": "接続"
+    },
+    "disconnect": {
+      "button": "切断"
+    },
+    "connecting": "サーバーに接続中...",
+    "connected": "サーバーに接続中",
+    "rooms": {
+      "title": "利用可能なルーム",
+      "empty": "ルームがありません"
+    },
+    "room": {
+      "name": "ルーム名",
+      "placeholder": "マイルーム"
     }
   },
   "session": {

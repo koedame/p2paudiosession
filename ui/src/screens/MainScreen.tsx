@@ -7,11 +7,22 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { ConnectionIndicator } from "../components/ConnectionIndicator";
+import {
+  signalingConnect,
+  signalingDisconnect,
+  signalingListRooms,
+  signalingJoinRoom,
+  signalingLeaveRoom,
+  signalingCreateRoom,
+  type RoomInfo,
+} from "../lib/tauri";
 import "./MainScreen.css";
 
 // Session state type
 type SessionState =
   | { status: "idle" }
+  | { status: "connecting_server" }
+  | { status: "server_connected"; rooms: RoomInfo[] }
   | { status: "creating" }
   | { status: "joining"; code: string }
   | { status: "connected"; roomCode: string; participants: string[] }
@@ -20,57 +31,131 @@ type SessionState =
 export function MainScreen() {
   const { t, i18n } = useTranslation();
   const [sessionState, setSessionState] = useState<SessionState>({ status: "idle" });
-  const [inviteCode, setInviteCode] = useState("");
+  const [serverUrl, setServerUrl] = useState("ws://localhost:8080");
+  const [connectionId, setConnectionId] = useState<number | null>(null);
+  const [peerName, setPeerName] = useState("User");
+  const [roomName, setRoomName] = useState("");
 
   // Update html lang attribute when language changes
   useEffect(() => {
     document.documentElement.lang = i18n.language;
   }, [i18n.language]);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (connectionId !== null) {
+        signalingDisconnect(connectionId).catch(console.error);
+      }
+    };
+  }, [connectionId]);
+
+  // Handle server connection
+  const handleConnectServer = async () => {
+    setSessionState({ status: "connecting_server" });
+
+    try {
+      const connId = await signalingConnect(serverUrl);
+      setConnectionId(connId);
+
+      const rooms = await signalingListRooms(connId);
+      setSessionState({ status: "server_connected", rooms });
+    } catch (e) {
+      setSessionState({
+        status: "error",
+        message: String(e),
+      });
+    }
+  };
+
+  // Handle disconnect from server
+  const handleDisconnectServer = async () => {
+    if (connectionId !== null) {
+      try {
+        await signalingDisconnect(connectionId);
+      } catch (e) {
+        console.error("Failed to disconnect:", e);
+      }
+      setConnectionId(null);
+    }
+    setSessionState({ status: "idle" });
+  };
+
+  // Refresh room list
+  const handleRefreshRooms = async () => {
+    if (connectionId === null) return;
+
+    try {
+      const rooms = await signalingListRooms(connectionId);
+      setSessionState({ status: "server_connected", rooms });
+    } catch (e) {
+      setSessionState({
+        status: "error",
+        message: String(e),
+      });
+    }
+  };
+
   // Handle room creation
   const handleCreateRoom = async () => {
+    if (connectionId === null) return;
+
     setSessionState({ status: "creating" });
 
-    // TODO: Implement actual room creation via Tauri IPC
-    // For now, simulate with timeout
-    setTimeout(() => {
-      // Simulated success - in real implementation, this would come from backend
+    try {
+      const result = await signalingCreateRoom(
+        connectionId,
+        roomName || "My Room",
+        peerName
+      );
       setSessionState({
         status: "connected",
-        roomCode: "ABC123",
-        participants: [],
+        roomCode: result.room_id,
+        participants: result.peers.map((p) => p.name),
       });
-    }, 1500);
+    } catch (e) {
+      setSessionState({
+        status: "error",
+        message: String(e),
+      });
+    }
   };
 
   // Handle room join
-  const handleJoinRoom = async () => {
-    if (!inviteCode.trim()) return;
+  const handleJoinRoom = async (roomId: string) => {
+    if (connectionId === null) return;
 
-    setSessionState({ status: "joining", code: inviteCode });
+    setSessionState({ status: "joining", code: roomId });
 
-    // TODO: Implement actual room joining via Tauri IPC
-    // For now, simulate with timeout
-    setTimeout(() => {
-      if (inviteCode.toUpperCase() === "ERROR") {
-        setSessionState({
-          status: "error",
-          message: t("error.room.notFound.title"),
-        });
-      } else {
-        setSessionState({
-          status: "connected",
-          roomCode: inviteCode.toUpperCase(),
-          participants: ["Host"],
-        });
-      }
-    }, 1500);
+    try {
+      const result = await signalingJoinRoom(connectionId, roomId, peerName);
+      setSessionState({
+        status: "connected",
+        roomCode: result.room_id,
+        participants: result.peers.map((p) => p.name),
+      });
+    } catch (e) {
+      setSessionState({
+        status: "error",
+        message: String(e),
+      });
+    }
   };
 
   // Handle leave room
-  const handleLeaveRoom = () => {
-    setSessionState({ status: "idle" });
-    setInviteCode("");
+  const handleLeaveRoom = async () => {
+    if (connectionId === null) return;
+
+    try {
+      await signalingLeaveRoom(connectionId);
+      const rooms = await signalingListRooms(connectionId);
+      setSessionState({ status: "server_connected", rooms });
+    } catch (e) {
+      setSessionState({
+        status: "error",
+        message: String(e),
+      });
+    }
   };
 
   // Handle settings click
@@ -79,7 +164,7 @@ export function MainScreen() {
     console.log("Settings clicked");
   };
 
-  // Render idle (disconnected) state
+  // Render idle (disconnected from server) state
   const renderIdleState = () => (
     <>
       <div className="main-status">
@@ -87,36 +172,41 @@ export function MainScreen() {
       </div>
 
       <div className="main-card">
-        <button
-          className="main-card__create-btn"
-          onClick={handleCreateRoom}
-          disabled={sessionState.status !== "idle"}
-        >
-          {t("session.create.button")}
-        </button>
-
-        <div className="main-card__divider">{t("common.label.or", "or")}</div>
-
-        <div className="main-card__join-form">
-          <label className="main-card__join-label">{t("session.invite.code")}</label>
+        <div className="main-card__server-form">
+          <label className="main-card__join-label">
+            {t("signaling.server.label", "Signaling Server")}
+          </label>
           <div className="main-card__join-input-group">
             <input
               type="text"
               className="main-card__join-input"
-              placeholder={t("session.join.placeholder")}
-              value={inviteCode}
-              onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-              maxLength={6}
-              disabled={sessionState.status !== "idle"}
+              placeholder="ws://localhost:8080"
+              value={serverUrl}
+              onChange={(e) => setServerUrl(e.target.value)}
             />
             <button
               className="main-card__join-btn"
-              onClick={handleJoinRoom}
-              disabled={!inviteCode.trim() || sessionState.status !== "idle"}
+              onClick={handleConnectServer}
+              disabled={!serverUrl.trim()}
             >
-              {t("session.join.button")}
+              {t("signaling.connect.button", "Connect")}
             </button>
           </div>
+        </div>
+
+        <div className="main-card__divider" />
+
+        <div className="main-card__name-form">
+          <label className="main-card__join-label">
+            {t("signaling.peer.name", "Your Name")}
+          </label>
+          <input
+            type="text"
+            className="main-card__join-input"
+            placeholder="User"
+            value={peerName}
+            onChange={(e) => setPeerName(e.target.value)}
+          />
         </div>
       </div>
 
@@ -125,6 +215,93 @@ export function MainScreen() {
       </div>
     </>
   );
+
+  // Render server connected state (room list)
+  const renderServerConnectedState = () => {
+    if (sessionState.status !== "server_connected") return null;
+
+    return (
+      <>
+        <div className="main-status">
+          <ConnectionIndicator status="connected" size="lg" />
+          <span className="main-status__text">
+            {t("signaling.connected", "Connected to server")}
+          </span>
+        </div>
+
+        <div className="main-card">
+          <div className="main-card__section">
+            <div className="main-card__section-header">
+              <h3>{t("signaling.rooms.title", "Available Rooms")}</h3>
+              <button
+                className="main-card__icon-btn"
+                onClick={handleRefreshRooms}
+                title={t("common.button.refresh", "Refresh")}
+              >
+                ↻
+              </button>
+            </div>
+
+            {sessionState.rooms.length === 0 ? (
+              <p className="main-card__empty">
+                {t("signaling.rooms.empty", "No rooms available")}
+              </p>
+            ) : (
+              <ul className="main-card__room-list">
+                {sessionState.rooms.map((room) => (
+                  <li key={room.id} className="main-card__room-item">
+                    <div className="main-card__room-info">
+                      <span className="main-card__room-name">{room.name}</span>
+                      <span className="main-card__room-peers">
+                        {room.peer_count}/{room.max_peers}
+                      </span>
+                    </div>
+                    <button
+                      className="main-card__join-btn main-card__join-btn--small"
+                      onClick={() => handleJoinRoom(room.id)}
+                      disabled={room.peer_count >= room.max_peers}
+                    >
+                      {t("session.join.button")}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="main-card__divider">{t("common.label.or")}</div>
+
+          <div className="main-card__create-section">
+            <label className="main-card__join-label">
+              {t("signaling.room.name", "Room Name")}
+            </label>
+            <div className="main-card__join-input-group">
+              <input
+                type="text"
+                className="main-card__join-input"
+                placeholder={t("signaling.room.placeholder", "My Room")}
+                value={roomName}
+                onChange={(e) => setRoomName(e.target.value)}
+              />
+              <button
+                className="main-card__create-btn"
+                onClick={handleCreateRoom}
+              >
+                {t("session.create.button")}
+              </button>
+            </div>
+          </div>
+
+          <button
+            className="main-card__disconnect-btn"
+            onClick={handleDisconnectServer}
+          >
+            {t("signaling.disconnect.button", "Disconnect")}
+          </button>
+        </div>
+      </>
+    );
+  };
 
   // Render connecting state
   const renderConnectingState = () => (
@@ -135,9 +312,11 @@ export function MainScreen() {
 
       <div className="main-card" style={{ textAlign: "center" }}>
         <p style={{ color: "var(--color-text-secondary)" }}>
-          {sessionState.status === "creating"
-            ? t("session.create.loading")
-            : t("session.join.loading")}
+          {sessionState.status === "connecting_server"
+            ? t("signaling.connecting", "Connecting to server...")
+            : sessionState.status === "creating"
+              ? t("session.create.loading")
+              : t("session.join.loading")}
         </p>
       </div>
     </>
@@ -182,7 +361,7 @@ export function MainScreen() {
                   marginBottom: "var(--space-xs)",
                 }}
               >
-                {t("mixer.channel.you")}
+                {peerName} ({t("mixer.channel.you")})
               </li>
               {sessionState.participants.map((participant, index) => (
                 <li
@@ -234,6 +413,11 @@ export function MainScreen() {
     );
   };
 
+  const isConnecting =
+    sessionState.status === "connecting_server" ||
+    sessionState.status === "creating" ||
+    sessionState.status === "joining";
+
   return (
     <div className="main-screen">
       <header className="main-header">
@@ -254,8 +438,8 @@ export function MainScreen() {
 
       <main className="main-content">
         {sessionState.status === "idle" && renderIdleState()}
-        {(sessionState.status === "creating" || sessionState.status === "joining") &&
-          renderConnectingState()}
+        {sessionState.status === "server_connected" && renderServerConnectedState()}
+        {isConnecting && renderConnectingState()}
         {sessionState.status === "connected" && renderConnectedState()}
         {sessionState.status === "error" && renderErrorState()}
       </main>
