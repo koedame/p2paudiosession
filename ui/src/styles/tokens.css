@@ -1,0 +1,270 @@
+/**
+ * Design Tokens - jamjam UI
+ *
+ * All styling should use these CSS custom properties.
+ * This enables theme switching (dark/light) and design consistency.
+ */
+
+/* ===================================================================
+   COLOR TOKENS - Dark Theme (Default)
+   =================================================================== */
+:root,
+:root[data-theme="dark"] {
+  /* === Background === */
+  --color-bg-primary: #1E1E2E;
+  --color-bg-secondary: #2A2A3E;
+  --color-bg-elevated: #363652;
+  --color-bg-overlay: rgba(0, 0, 0, 0.5);
+
+  /* === Accent === */
+  --color-accent: #7C5CFF;
+  --color-accent-hover: #9B7FFF;
+  --color-accent-active: #6B4FE0;
+
+  /* === Semantic === */
+  --color-success: #4ADE80;
+  --color-success-bg: rgba(74, 222, 128, 0.1);
+  --color-warning: #FBBF24;
+  --color-warning-bg: rgba(251, 191, 36, 0.1);
+  --color-danger: #F87171;
+  --color-danger-bg: rgba(248, 113, 113, 0.1);
+
+  /* === Text === */
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #A0A0B0;
+  --color-text-disabled: #606070;
+  --color-text-inverse: #1E1E2E;
+
+  /* === Border === */
+  --color-border: #404060;
+  --color-border-focus: #7C5CFF;
+  --color-border-hover: #505070;
+
+  /* === Connection Status === */
+  --color-status-disconnected: #606070;
+  --color-status-connecting: #FBBF24;
+  --color-status-connected: #4ADE80;
+  --color-status-unstable: #FBBF24;
+  --color-status-error: #F87171;
+
+  /* === Mixer === */
+  --color-meter-low: #4ADE80;
+  --color-meter-mid: #FBBF24;
+  --color-meter-high: #F87171;
+  --color-mute-active: #F87171;
+  --color-solo-active: #FBBF24;
+}
+
+/* ===================================================================
+   COLOR TOKENS - Light Theme
+   =================================================================== */
+:root[data-theme="light"] {
+  /* === Background === */
+  --color-bg-primary: #FAFAFA;
+  --color-bg-secondary: #FFFFFF;
+  --color-bg-elevated: #F0F0F5;
+  --color-bg-overlay: rgba(0, 0, 0, 0.3);
+
+  /* === Accent === */
+  --color-accent: #6B4FE0;
+  --color-accent-hover: #5A3FD0;
+  --color-accent-active: #4A2FC0;
+
+  /* === Semantic === */
+  --color-success: #22C55E;
+  --color-success-bg: rgba(34, 197, 94, 0.1);
+  --color-warning: #EAB308;
+  --color-warning-bg: rgba(234, 179, 8, 0.1);
+  --color-danger: #EF4444;
+  --color-danger-bg: rgba(239, 68, 68, 0.1);
+
+  /* === Text === */
+  --color-text-primary: #1E1E2E;
+  --color-text-secondary: #606070;
+  --color-text-disabled: #A0A0B0;
+  --color-text-inverse: #FFFFFF;
+
+  /* === Border === */
+  --color-border: #E0E0E8;
+  --color-border-focus: #6B4FE0;
+  --color-border-hover: #D0D0D8;
+
+  /* === Connection Status === */
+  --color-status-disconnected: #A0A0B0;
+  --color-status-connecting: #EAB308;
+  --color-status-connected: #22C55E;
+  --color-status-unstable: #EAB308;
+  --color-status-error: #EF4444;
+
+  /* === Mixer === */
+  --color-meter-low: #22C55E;
+  --color-meter-mid: #EAB308;
+  --color-meter-high: #EF4444;
+  --color-mute-active: #EF4444;
+  --color-solo-active: #EAB308;
+}
+
+/* ===================================================================
+   TYPOGRAPHY TOKENS
+   =================================================================== */
+:root {
+  /* === Font Family === */
+  --font-family-sans:
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Hiragino Sans',
+    'Hiragino Kaku Gothic ProN',
+    'Noto Sans JP',
+    sans-serif;
+
+  --font-family-mono:
+    'SF Mono',
+    'Fira Code',
+    Consolas,
+    'Courier New',
+    monospace;
+
+  /* === Font Size === */
+  --font-size-h1: 24px;
+  --font-size-h2: 18px;
+  --font-size-h3: 16px;
+  --font-size-body: 14px;
+  --font-size-caption: 12px;
+  --font-size-small: 11px;
+
+  /* === Font Weight === */
+  --font-weight-bold: 700;
+  --font-weight-semibold: 600;
+  --font-weight-normal: 400;
+
+  /* === Line Height === */
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+
+  /* === Letter Spacing === */
+  --letter-spacing-tight: -0.02em;
+  --letter-spacing-normal: 0;
+  --letter-spacing-wide: 0.02em;
+}
+
+/* ===================================================================
+   SPACING TOKENS
+   =================================================================== */
+:root {
+  /* === Base Unit === */
+  --space-unit: 4px;
+
+  /* === Spacing Scale === */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+
+  /* === Component Padding === */
+  --padding-button: var(--space-sm) var(--space-md);
+  --padding-card: var(--space-md);
+  --padding-input: var(--space-sm) var(--space-sm);
+  --padding-modal: var(--space-lg);
+
+  /* === Layout === */
+  --gap-xs: var(--space-xs);
+  --gap-sm: var(--space-sm);
+  --gap-md: var(--space-md);
+  --gap-lg: var(--space-lg);
+}
+
+/* ===================================================================
+   BORDER RADIUS TOKENS
+   =================================================================== */
+:root {
+  --radius-none: 0;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+}
+
+/* ===================================================================
+   SHADOW TOKENS
+   =================================================================== */
+:root {
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.2);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.25);
+
+  /* Focus ring */
+  --shadow-focus: 0 0 0 3px rgba(124, 92, 255, 0.4);
+}
+
+/* ===================================================================
+   ANIMATION TOKENS
+   =================================================================== */
+:root {
+  /* === Duration === */
+  --duration-instant: 0ms;
+  --duration-fast: 100ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+  --duration-slower: 500ms;
+
+  /* === Easing === */
+  --ease-default: ease-out;
+  --ease-in: ease-in;
+  --ease-in-out: ease-in-out;
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+  /* === Transition Presets === */
+  --transition-fast: var(--duration-fast) var(--ease-default);
+  --transition-normal: var(--duration-normal) var(--ease-default);
+  --transition-slow: var(--duration-slow) var(--ease-default);
+}
+
+/* Accessibility: respect motion preference */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-instant: 0ms;
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+    --duration-slow: 0ms;
+    --duration-slower: 0ms;
+  }
+}
+
+/* ===================================================================
+   Z-INDEX TOKENS
+   =================================================================== */
+:root {
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 300;
+  --z-modal: 400;
+  --z-popover: 500;
+  --z-tooltip: 600;
+  --z-toast: 700;
+}
+
+/* ===================================================================
+   RESPONSIVE TOKENS
+   =================================================================== */
+:root {
+  /* === Breakpoints === */
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+
+  /* === Container === */
+  --container-sm: 640px;
+  --container-md: 768px;
+  --container-lg: 1024px;
+  --container-xl: 1200px;
+}

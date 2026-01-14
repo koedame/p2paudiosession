@@ -362,40 +362,47 @@ pub struct JitterBufferStats {
 
 ## 6. FEC API
 
-### 6.1 設定
+> **実装状況**: `FecEncoder`/`FecDecoder` は実装済み。設定用の `FecConfig` 構造体は未実装。
+
+### 6.1 エンコーダ/デコーダ（実装済み）
 
 ```rust
-struct FecConfig {
-    /// FECを有効にするか
-    enabled: bool,
-    /// 冗長度（0.0〜1.0、例: 0.1 = 10%）
-    redundancy: f32,
-    /// グループサイズ（FEC計算単位のパケット数）
-    group_size: u32,
+/// FECエンコーダ
+pub struct FecEncoder {
+    /// XOR FECパケットを生成
+    pub fn encode(&mut self, packets: &[&[u8]]) -> Option<FecPacket>;
+}
+
+/// FECデコーダ
+pub struct FecDecoder {
+    /// パケットを挿入（FECまたはデータパケット）
+    pub fn insert_packet(&mut self, packet: ReceivedPacket);
+    /// 回復可能なパケットを取得
+    pub fn try_recover(&mut self) -> Vec<RecoveredPacket>;
+}
+
+/// FECパケット
+pub struct FecPacket {
+    pub group_id: u32,
+    pub mask: u32,
+    pub payload: Vec<u8>,
+}
+
+/// 回復されたパケット
+pub struct RecoveredPacket {
+    pub sequence: u32,
+    pub payload: Vec<u8>,
 }
 ```
 
-### 6.2 操作
+### 6.2 設定API（計画中）
 
 ```rust
-/// FEC設定を変更
-///
-/// スレッド: 任意
-/// ブロッキング: No
-fn configure_fec(&self, config: FecConfig);
-
-/// FEC統計を取得
-fn get_fec_stats(&self) -> FecStats;
-
-struct FecStats {
-    /// 送信FECパケット数
-    fec_packets_sent: u64,
-    /// 受信FECパケット数
-    fec_packets_received: u64,
-    /// FECで復元したパケット数
-    packets_recovered: u64,
-    /// 復元不可能だったパケット数
-    packets_lost: u64,
+// 将来実装予定
+struct FecConfig {
+    enabled: bool,
+    redundancy: f32,
+    group_size: u32,
 }
 ```
 
@@ -456,6 +463,8 @@ impl SequenceTracker {
 ---
 
 ## 8. 帯域推定 API
+
+> **実装状況**: 計画中。帯域推定機能は将来の実装予定。
 
 ```rust
 /// 帯域推定設定
@@ -814,6 +823,8 @@ Peer: Alice (192.168.1.100:5000)
 
 ## 11. 推奨設定 API
 
+> **実装状況**: 計画中。プリセット推奨機能は将来の実装予定。
+
 ジッター値に基づいて最適なプリセットを推奨する。
 
 ```rust
@@ -909,6 +920,8 @@ match recommendation.quality_level {
 ---
 
 ## 12. イベント
+
+> **実装状況**: 計画中。イベントシステムは将来の実装予定。
 
 ```rust
 enum NetworkEvent {

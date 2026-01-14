@@ -728,7 +728,7 @@ pub enum DeviceEvent {
 
 ---
 
-## 14. 使用例
+## 15. 使用例
 
 ```rust
 // デバイス列挙

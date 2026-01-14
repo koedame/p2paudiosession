@@ -74,6 +74,9 @@ sequenceDiagram
 
 ## 3. クライアント API
 
+> **実装状況**: 基本的なシグナリング機能（`SignalingClient`, `SignalingConnection`）は実装済み。
+> 高レベルAPI（`create_room()`, `join_room_by_code()`等）は `SignalingMessage` enum 経由で提供。
+
 ### 3.1 接続
 
 ```rust
@@ -86,17 +89,23 @@ async fn connect(server_url: &str) -> Result<SignalingClient, SignalingError>;
 
 ### 3.2 ルーム作成
 
+> **実装状況**: `SignalingMessage::CreateRoom` で実装済み。
+> 招待コード・招待URL生成は将来の拡張として計画中。
+
 ```rust
-/// ルームを作成
+/// ルームを作成（現在の実装）
 ///
-/// # 引数
-/// - options: ルーム作成オプション
+/// SignalingMessage::CreateRoom を使用:
+/// - room_name: ルーム名
+/// - password: パスワード（オプション）
+/// - peer_name: 参加者名
 ///
-/// # 戻り値
-/// - room_id: ルームID（UUID）
-/// - invite_code: 招待コード（6文字英数字）
-/// - invite_url: 招待URL
-async fn create_room(&self, options: CreateRoomOptions) -> Result<RoomInfo, SignalingError>;
+/// 戻り値: SignalingMessage::RoomCreated { room_id, peer_id }
+
+// --- 将来の拡張（計画中）---
+
+/// 高レベルAPI（計画中）
+async fn create_room(&self, options: CreateRoomOptions) -> Result<CreateRoomResult, SignalingError>;
 
 struct CreateRoomOptions {
     /// ルーム名（オプション）
@@ -109,36 +118,46 @@ struct CreateRoomOptions {
     is_public: bool,
 }
 
-struct RoomInfo {
+struct CreateRoomResult {
     /// ルームID
     room_id: String,
-    /// 招待コード
+    /// 招待コード（計画中）
     invite_code: String,
-    /// 招待URL
+    /// 招待URL（計画中）
     invite_url: String,
 }
 ```
 
 ### 3.3 ルーム参加
 
+> **実装状況**: `SignalingMessage::JoinRoom` で実装済み。
+> 招待コードでの参加は将来の拡張として計画中。
+
 ```rust
-/// ルームに参加（招待コードで）
+/// ルームに参加（現在の実装）
 ///
-/// # 引数
-/// - invite_code: 招待コード（6文字英数字）
-/// - options: 参加オプション
+/// SignalingMessage::JoinRoom を使用:
+/// - room_id: ルームID
+/// - password: パスワード（オプション）
+/// - peer_name: 参加者名
+///
+/// 戻り値: SignalingMessage::RoomJoined { room_id, peer_id, peers: Vec<PeerInfo> }
+
+// --- 将来の拡張（計画中）---
+
+/// ルームに参加（招待コードで、計画中）
 async fn join_room_by_code(
     &self,
     invite_code: &str,
     options: JoinRoomOptions,
-) -> Result<SessionInfo, SignalingError>;
+) -> Result<JoinRoomResult, SignalingError>;
 
-/// ルームに参加（ルームIDで）
+/// ルームに参加（ルームIDで、高レベルAPI計画中）
 async fn join_room_by_id(
     &self,
     room_id: &str,
     options: JoinRoomOptions,
-) -> Result<SessionInfo, SignalingError>;
+) -> Result<JoinRoomResult, SignalingError>;
 
 struct JoinRoomOptions {
     /// 表示名
@@ -147,30 +166,28 @@ struct JoinRoomOptions {
     password: Option<String>,
 }
 
-struct SessionInfo {
+/// 参加結果（計画中の拡張版）
+struct JoinRoomResult {
     /// 自分のセッションID
     session_id: String,
-    /// 自分の参加者ID
-    participant_id: ParticipantId,
+    /// 自分の参加者ID（UUID）
+    peer_id: Uuid,
     /// ルーム情報
     room: RoomDetails,
     /// 既存の参加者一覧
-    participants: Vec<Participant>,
+    peers: Vec<PeerInfo>,
 }
 
+/// ルーム詳細（計画中の拡張版）
 struct RoomDetails {
     room_id: String,
     name: Option<String>,
-    host_id: ParticipantId,
+    host_id: Uuid,
     created_at: u64,
 }
-
-struct Participant {
-    id: ParticipantId,
-    display_name: String,
-    joined_at: u64,
-}
 ```
+
+**Note**: 現在の実装では `PeerInfo` を参加者情報として使用。詳細は Section 5 を参照。
 
 ### 3.4 ルーム退出
 
@@ -191,6 +208,10 @@ async fn close_room(&self) -> Result<(), SignalingError>;
 ---
 
 ## 4. ICE候補交換 API
+
+> **実装状況**: 計画中。現在の実装ではICE候補交換はシグナリングサーバー経由ではなく、
+> 直接接続（`UpdatePeerInfo`でアドレス情報を交換）で対応。
+> WebRTC互換のICE/SDP交換は将来の拡張として計画中。
 
 ### 4.1 ICE候補送信
 
@@ -244,6 +265,8 @@ struct SessionDescription {
 ---
 
 ## 5. メッセージ型
+
+> **実装状況**: 実装済み。`src/network/signaling.rs` で定義。
 
 シグナリングプロトコルで使用されるメッセージ型。
 クライアント↔サーバー間の双方向通信で使用される。

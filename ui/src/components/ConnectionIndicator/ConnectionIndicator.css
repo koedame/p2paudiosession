@@ -1,0 +1,120 @@
+/**
+ * ConnectionIndicator styles
+ */
+
+.connection-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  cursor: default;
+}
+
+.connection-indicator--clickable {
+  cursor: pointer;
+}
+
+.connection-indicator--clickable:hover {
+  opacity: 0.8;
+}
+
+.connection-indicator--clickable:focus {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  border-radius: var(--radius-sm);
+}
+
+/* Icon styles */
+.connection-indicator__icon {
+  flex-shrink: 0;
+  transition: color var(--transition-normal);
+}
+
+/* Status colors */
+.connection-indicator--disconnected .connection-indicator__icon {
+  color: var(--color-status-disconnected);
+}
+
+.connection-indicator--connecting .connection-indicator__icon {
+  color: var(--color-status-connecting);
+  animation: connection-indicator-spin 1s linear infinite;
+}
+
+.connection-indicator--connected .connection-indicator__icon {
+  color: var(--color-status-connected);
+}
+
+.connection-indicator--unstable .connection-indicator__icon {
+  color: var(--color-status-unstable);
+}
+
+.connection-indicator--error .connection-indicator__icon {
+  color: var(--color-status-error);
+}
+
+/* Text styles */
+.connection-indicator__text {
+  font-family: var(--font-family-sans);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-secondary);
+  transition: color var(--transition-normal);
+}
+
+.connection-indicator__latency {
+  font-family: var(--font-family-mono);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  margin-left: var(--space-xs);
+}
+
+/* Size variants */
+.connection-indicator--sm .connection-indicator__icon {
+  width: 12px;
+  height: 12px;
+}
+
+.connection-indicator--sm .connection-indicator__text,
+.connection-indicator--sm .connection-indicator__latency {
+  font-size: var(--font-size-caption);
+}
+
+.connection-indicator--md .connection-indicator__icon {
+  width: 16px;
+  height: 16px;
+}
+
+.connection-indicator--md .connection-indicator__text,
+.connection-indicator--md .connection-indicator__latency {
+  font-size: var(--font-size-body);
+}
+
+.connection-indicator--lg .connection-indicator__icon {
+  width: 20px;
+  height: 20px;
+}
+
+.connection-indicator--lg .connection-indicator__text,
+.connection-indicator--lg .connection-indicator__latency {
+  font-size: var(--font-size-h3);
+}
+
+/* Spin animation */
+@keyframes connection-indicator-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Stop animation during active session (CPU optimization) */
+.session-active .connection-indicator--connecting .connection-indicator__icon {
+  animation: none;
+}
+
+/* Accessibility: respect motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .connection-indicator--connecting .connection-indicator__icon {
+    animation: none;
+  }
+}

@@ -1,0 +1,231 @@
+{
+  "common": {
+    "button": {
+      "cancel": "キャンセル",
+      "ok": "OK",
+      "back": "戻る",
+      "next": "次へ",
+      "save": "保存",
+      "retry": "再試行",
+      "close": "閉じる"
+    },
+    "label": {
+      "loading": "読み込み中...",
+      "required": "必須"
+    }
+  },
+  "session": {
+    "create": {
+      "button": "ルームを作成",
+      "loading": "ルームを作成中..."
+    },
+    "join": {
+      "button": "参加",
+      "placeholder": "招待コードを入力",
+      "loading": "接続中..."
+    },
+    "leave": {
+      "button": "退出",
+      "confirm": "セッションから退出しますか？"
+    },
+    "invite": {
+      "code": "招待コード",
+      "url": "招待URL",
+      "copied": "コピーしました"
+    },
+    "participant": {
+      "count": "{{count}}名参加中",
+      "joined": "{{name}}さんが参加しました",
+      "left": "{{name}}さんが退出しました"
+    }
+  },
+  "audio": {
+    "device": {
+      "input": "入力デバイス",
+      "output": "出力デバイス",
+      "select": "デバイスを選択",
+      "default": "デフォルト"
+    },
+    "test": {
+      "button": "テスト",
+      "recording": "録音中...",
+      "playing": "再生中..."
+    }
+  },
+  "mixer": {
+    "channel": {
+      "you": "自分",
+      "mute": "ミュート",
+      "unmute": "ミュート解除",
+      "solo": "ソロ"
+    },
+    "master": {
+      "volume": "マスター音量"
+    }
+  },
+  "settings": {
+    "title": "設定",
+    "audio": {
+      "title": "オーディオ"
+    },
+    "preset": {
+      "title": "モード設定"
+    },
+    "advanced": {
+      "title": "詳細設定",
+      "sampleRate": "サンプルレート",
+      "frameSize": "フレームサイズ",
+      "codec": "コーデック",
+      "jitterBuffer": "バッファ",
+      "fec": "エラー補正"
+    },
+    "display": {
+      "title": "表示",
+      "language": "言語",
+      "theme": "テーマ",
+      "themeDark": "ダーク",
+      "themeLight": "ライト",
+      "themeSystem": "システム設定に従う"
+    }
+  },
+  "status": {
+    "disconnected": "未接続",
+    "connecting": "接続中...",
+    "connected": "接続中",
+    "unstable": "不安定",
+    "error": "切断されました",
+    "latency": "{{ms}}ms"
+  },
+  "preset": {
+    "zeroLatency": {
+      "name": "最速モード",
+      "description": "光回線同士の演奏に最適"
+    },
+    "ultraLowLatency": {
+      "name": "低遅延モード",
+      "description": "安定した回線での演奏に"
+    },
+    "balanced": {
+      "name": "バランスモード",
+      "description": "通常のインターネット接続に最適"
+    },
+    "highQuality": {
+      "name": "高音質モード",
+      "description": "高速回線での録音向け"
+    },
+    "recommended": "推奨"
+  },
+  "quality": {
+    "excellent": "非常に良好",
+    "good": "良好",
+    "fair": "普通",
+    "poor": "悪い",
+    "recommendation": "{{preset}}をお勧めします",
+    "switch": "{{preset}}に切り替え"
+  },
+  "error": {
+    "connection": {
+      "timeout": {
+        "title": "接続できませんでした",
+        "message": "相手が見つかりません。招待コードを確認してください。"
+      },
+      "refused": {
+        "title": "接続が拒否されました",
+        "message": "ルームが存在しないか、終了しています。"
+      },
+      "lost": {
+        "title": "接続が切れました",
+        "message": "ネットワークを確認してください。"
+      }
+    },
+    "audio": {
+      "device": {
+        "title": "マイクが使えません",
+        "message": "他のアプリがマイクを使用中かもしれません。"
+      },
+      "permission": {
+        "title": "マイクの許可が必要です",
+        "message": "設定からマイクへのアクセスを許可してください。"
+      }
+    },
+    "room": {
+      "full": {
+        "title": "ルームが満員です",
+        "message": "参加者数が上限に達しています。"
+      },
+      "password": {
+        "title": "パスワードが正しくありません",
+        "message": "入力したパスワードを確認してください。"
+      },
+      "notFound": {
+        "title": "ルームが見つかりません",
+        "message": "招待コードを確認してください。"
+      }
+    },
+    "generic": {
+      "title": "エラーが発生しました",
+      "message": "しばらく待ってから再試行してください。"
+    },
+    "action": {
+      "retry": "再試行",
+      "changeDevice": "デバイスを変更",
+      "openSettings": "設定を開く"
+    }
+  },
+  "warning": {
+    "wifi": {
+      "title": "WiFi接続を検出しました",
+      "message": "有線接続を推奨します。WiFiは遅延が不安定になる可能性があります。"
+    },
+    "speaker": {
+      "title": "スピーカー使用を検出しました",
+      "message": "エコー防止のためヘッドフォンを推奨します。"
+    },
+    "packetLoss": {
+      "title": "パケットロス率が高くなっています",
+      "message": "ネットワーク状態を確認してください。"
+    },
+    "bandwidth": {
+      "title": "帯域不足のため音質を下げました",
+      "message": "ネットワーク状態が回復すると自動的に戻ります。"
+    }
+  },
+  "onboarding": {
+    "welcome": {
+      "title": "ようこそ",
+      "subtitle": "音楽仲間とオンラインで一緒に演奏しよう",
+      "requirements": "ヘッドフォンと有線接続を推奨します"
+    },
+    "mic": {
+      "title": "マイクを選択",
+      "subtitle": "使用するマイクを選んでください",
+      "test": "声を出してメーターが動くことを確認"
+    },
+    "speaker": {
+      "title": "スピーカーを選択",
+      "subtitle": "使用するスピーカーを選んでください",
+      "testButton": "テスト音を再生"
+    },
+    "test": {
+      "title": "音声テスト",
+      "subtitle": "マイクとスピーカーをテストします",
+      "recordButton": "録音して確認",
+      "question": "自分の声が聞こえましたか？"
+    },
+    "preset": {
+      "title": "モードを選択",
+      "subtitle": "まずはバランスモードがおすすめです"
+    },
+    "complete": {
+      "title": "準備完了！",
+      "subtitle": "セッションを始めましょう"
+    },
+    "skip": "後で設定する"
+  },
+  "notification": {
+    "settingsChanged": "設定を変更しました",
+    "connected": "接続しました",
+    "disconnected": "切断しました",
+    "bandwidthRecovered": "帯域が回復しました"
+  }
+}

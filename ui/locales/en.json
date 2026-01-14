@@ -1,0 +1,232 @@
+{
+  "common": {
+    "button": {
+      "cancel": "Cancel",
+      "ok": "OK",
+      "back": "Back",
+      "next": "Next",
+      "save": "Save",
+      "retry": "Retry",
+      "close": "Close"
+    },
+    "label": {
+      "loading": "Loading...",
+      "required": "Required"
+    }
+  },
+  "session": {
+    "create": {
+      "button": "Create Room",
+      "loading": "Creating room..."
+    },
+    "join": {
+      "button": "Join",
+      "placeholder": "Enter invite code",
+      "loading": "Connecting..."
+    },
+    "leave": {
+      "button": "Leave",
+      "confirm": "Leave this session?"
+    },
+    "invite": {
+      "code": "Invite Code",
+      "url": "Invite URL",
+      "copied": "Copied"
+    },
+    "participant": {
+      "count_one": "{{count}} participant",
+      "count_other": "{{count}} participants",
+      "joined": "{{name}} joined",
+      "left": "{{name}} left"
+    }
+  },
+  "audio": {
+    "device": {
+      "input": "Input Device",
+      "output": "Output Device",
+      "select": "Select Device",
+      "default": "Default"
+    },
+    "test": {
+      "button": "Test",
+      "recording": "Recording...",
+      "playing": "Playing..."
+    }
+  },
+  "mixer": {
+    "channel": {
+      "you": "You",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "solo": "Solo"
+    },
+    "master": {
+      "volume": "Master Volume"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "audio": {
+      "title": "Audio"
+    },
+    "preset": {
+      "title": "Mode Settings"
+    },
+    "advanced": {
+      "title": "Advanced Settings",
+      "sampleRate": "Sample Rate",
+      "frameSize": "Frame Size",
+      "codec": "Codec",
+      "jitterBuffer": "Buffer",
+      "fec": "Error Correction"
+    },
+    "display": {
+      "title": "Display",
+      "language": "Language",
+      "theme": "Theme",
+      "themeDark": "Dark",
+      "themeLight": "Light",
+      "themeSystem": "System Default"
+    }
+  },
+  "status": {
+    "disconnected": "Disconnected",
+    "connecting": "Connecting...",
+    "connected": "Connected",
+    "unstable": "Unstable",
+    "error": "Disconnected",
+    "latency": "{{ms}}ms"
+  },
+  "preset": {
+    "zeroLatency": {
+      "name": "Fastest Mode",
+      "description": "For fiber-to-fiber connections"
+    },
+    "ultraLowLatency": {
+      "name": "Low Delay Mode",
+      "description": "For stable connections"
+    },
+    "balanced": {
+      "name": "Balanced Mode",
+      "description": "For typical internet connections"
+    },
+    "highQuality": {
+      "name": "High Quality Mode",
+      "description": "For high-speed recording"
+    },
+    "recommended": "Recommended"
+  },
+  "quality": {
+    "excellent": "Excellent",
+    "good": "Good",
+    "fair": "Fair",
+    "poor": "Poor",
+    "recommendation": "We recommend {{preset}}",
+    "switch": "Switch to {{preset}}"
+  },
+  "error": {
+    "connection": {
+      "timeout": {
+        "title": "Connection Failed",
+        "message": "Could not find the other party. Please check the invite code."
+      },
+      "refused": {
+        "title": "Connection Refused",
+        "message": "The room does not exist or has ended."
+      },
+      "lost": {
+        "title": "Connection Lost",
+        "message": "Please check your network connection."
+      }
+    },
+    "audio": {
+      "device": {
+        "title": "Microphone Unavailable",
+        "message": "Another app may be using the microphone."
+      },
+      "permission": {
+        "title": "Microphone Permission Required",
+        "message": "Please allow microphone access in settings."
+      }
+    },
+    "room": {
+      "full": {
+        "title": "Room is Full",
+        "message": "The participant limit has been reached."
+      },
+      "password": {
+        "title": "Incorrect Password",
+        "message": "Please check the password you entered."
+      },
+      "notFound": {
+        "title": "Room Not Found",
+        "message": "Please check the invite code."
+      }
+    },
+    "generic": {
+      "title": "An Error Occurred",
+      "message": "Please wait a moment and try again."
+    },
+    "action": {
+      "retry": "Retry",
+      "changeDevice": "Change Device",
+      "openSettings": "Open Settings"
+    }
+  },
+  "warning": {
+    "wifi": {
+      "title": "WiFi Connection Detected",
+      "message": "Wired connection is recommended. WiFi may cause unstable latency."
+    },
+    "speaker": {
+      "title": "Speaker Usage Detected",
+      "message": "Headphones are recommended to prevent echo."
+    },
+    "packetLoss": {
+      "title": "High Packet Loss Detected",
+      "message": "Please check your network connection."
+    },
+    "bandwidth": {
+      "title": "Audio Quality Reduced Due to Low Bandwidth",
+      "message": "Quality will automatically restore when network improves."
+    }
+  },
+  "onboarding": {
+    "welcome": {
+      "title": "Welcome",
+      "subtitle": "Play music online with your friends",
+      "requirements": "Headphones and wired connection recommended"
+    },
+    "mic": {
+      "title": "Select Microphone",
+      "subtitle": "Choose the microphone you want to use",
+      "test": "Speak and check if the meter moves"
+    },
+    "speaker": {
+      "title": "Select Speaker",
+      "subtitle": "Choose the speaker you want to use",
+      "testButton": "Play Test Sound"
+    },
+    "test": {
+      "title": "Audio Test",
+      "subtitle": "Test your microphone and speaker",
+      "recordButton": "Record and Check",
+      "question": "Did you hear your voice?"
+    },
+    "preset": {
+      "title": "Select Mode",
+      "subtitle": "We recommend starting with Balanced Mode"
+    },
+    "complete": {
+      "title": "All Set!",
+      "subtitle": "Let's start a session"
+    },
+    "skip": "Set up later"
+  },
+  "notification": {
+    "settingsChanged": "Settings changed",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "bandwidthRecovered": "Bandwidth recovered"
+  }
+}
