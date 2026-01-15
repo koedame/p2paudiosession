@@ -19,10 +19,16 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            artifact_name: jamjam-linux-x64
           - os: macos-latest
             target: x86_64-apple-darwin
+            artifact_name: jamjam-macos-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: jamjam-macos-arm64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            artifact_name: jamjam-windows-x64
 
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +48,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -71,34 +79,33 @@ jobs:
         run: cargo install tauri-cli --version "^2"
 
       - name: Build Tauri app
-        run: cargo tauri build
-        working-directory: src-tauri
+        run: cargo tauri build --target ${{ matrix.target }}
 
       - name: Upload artifacts (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: jamjam-linux
+          name: ${{ matrix.artifact_name }}
           path: |
-            src-tauri/target/release/bundle/appimage/*.AppImage
-            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
+            src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
 
       - name: Upload artifacts (macOS)
         if: matrix.os == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: jamjam-macos
+          name: ${{ matrix.artifact_name }}
           path: |
-            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
 
       - name: Upload artifacts (Windows)
         if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: jamjam-windows
+          name: ${{ matrix.artifact_name }}
           path: |
-            src-tauri/target/release/bundle/msi/*.msi
-            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
+            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
 
   release:
     name: Create Release
@@ -120,10 +127,11 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            artifacts/jamjam-linux/*.AppImage
-            artifacts/jamjam-linux/*.deb
-            artifacts/jamjam-macos/*.dmg
-            artifacts/jamjam-windows/*.msi
-            artifacts/jamjam-windows/*.exe
+            artifacts/jamjam-linux-x64/*.AppImage
+            artifacts/jamjam-linux-x64/*.deb
+            artifacts/jamjam-macos-x64/*.dmg
+            artifacts/jamjam-macos-arm64/*.dmg
+            artifacts/jamjam-windows-x64/*.msi
+            artifacts/jamjam-windows-x64/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
