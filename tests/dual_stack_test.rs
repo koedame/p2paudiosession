@@ -201,10 +201,12 @@ fn test_peer_info_with_candidates_roundtrip() {
 /// Test: Mixed IPv4/IPv6 candidate list sorting
 #[test]
 fn test_mixed_ipv4_ipv6_candidates_sorting() {
-    let mut candidates = [AddressCandidate::server_reflexive("203.0.113.50:5000".parse().unwrap()),
+    let mut candidates = [
+        AddressCandidate::server_reflexive("203.0.113.50:5000".parse().unwrap()),
         AddressCandidate::host("192.168.1.100:5000".parse().unwrap()),
         AddressCandidate::host("[::1]:5000".parse().unwrap()),
-        AddressCandidate::server_reflexive("[2001:db8::1]:5000".parse().unwrap())];
+        AddressCandidate::server_reflexive("[2001:db8::1]:5000".parse().unwrap()),
+    ];
 
     // Sort by priority (highest first)
     candidates.sort_by(|a, b| b.priority.cmp(&a.priority));
