@@ -46,4 +46,10 @@ pub enum NetworkError {
 
     #[error("Key exchange failed: {0}")]
     KeyExchangeFailed(String),
+
+    #[error("No connection candidates available")]
+    NoCandidates,
+
+    #[error("Connection failed: {0}")]
+    ConnectionFailed(String),
 }

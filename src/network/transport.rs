@@ -81,6 +81,15 @@ impl UdpTransport {
         Ok((packet, addr))
     }
 
+    /// Receive raw bytes (for connectivity probing without packet parsing)
+    pub async fn recv_raw(&self) -> Result<(Vec<u8>, SocketAddr), NetworkError> {
+        let mut buf = vec![0u8; 2048];
+        let (len, addr) = self.socket.recv_from(&mut buf).await?;
+        buf.truncate(len);
+        trace!("Received {} raw bytes from {}", len, addr);
+        Ok((buf, addr))
+    }
+
     /// Start a receive loop that sends packets to a channel
     pub fn start_receive_loop(
         self: Arc<Self>,

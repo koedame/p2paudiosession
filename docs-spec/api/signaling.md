@@ -294,9 +294,13 @@ enum SignalingMessage {
     },
     /// ルームから退出
     LeaveRoom,
-    /// ピア情報を更新
+    /// ピア情報を更新（アドレス候補付き）
     UpdatePeerInfo {
+        /// アドレス候補リスト（優先度順）
+        candidates: Vec<AddressCandidate>,
+        /// 後方互換用のパブリックアドレス
         public_addr: Option<SocketAddr>,
+        /// 後方互換用のローカルアドレス
         local_addr: Option<SocketAddr>,
     },
 
@@ -321,12 +325,33 @@ enum SignalingMessage {
     Error { message: String },
 }
 
-/// ピア情報
+/// ピア情報（複数アドレス候補対応）
 struct PeerInfo {
     id: Uuid,
     name: String,
+    /// アドレス候補リスト（優先度順、IPv4/IPv6デュアルスタック対応）
+    candidates: Vec<AddressCandidate>,
+    /// 後方互換用のパブリックアドレス
     public_addr: Option<SocketAddr>,
+    /// 後方互換用のローカルアドレス
     local_addr: Option<SocketAddr>,
+}
+
+/// アドレス候補
+struct AddressCandidate {
+    /// ソケットアドレス
+    address: SocketAddr,
+    /// 候補タイプ（Host = ローカル, ServerReflexive = STUN経由）
+    candidate_type: CandidateType,
+    /// RFC 5245準拠の優先度（大きいほど優先）
+    priority: u32,
+}
+
+enum CandidateType {
+    /// ローカルネットワークアドレス
+    Host,
+    /// STUN経由で取得したパブリックアドレス
+    ServerReflexive,
 }
 
 /// ルーム情報

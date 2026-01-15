@@ -348,6 +348,7 @@ async fn process_message(
             let peer = PeerInfo {
                 id: peer_id,
                 name: peer_name,
+                candidates: vec![],
                 public_addr: None,
                 local_addr: None,
             };
@@ -422,6 +423,7 @@ async fn process_message(
                     let peer = PeerInfo {
                         id: peer_id,
                         name: peer_name,
+                        candidates: vec![],
                         public_addr: None,
                         local_addr: None,
                     };
@@ -478,6 +480,7 @@ async fn process_message(
         }
 
         SignalingMessage::UpdatePeerInfo {
+            candidates,
             public_addr,
             local_addr,
         } => {
@@ -487,6 +490,11 @@ async fn process_message(
                 let mut rooms_guard = rooms.write().await;
                 if let Some(room) = rooms_guard.get_mut(room_id) {
                     if let Some(peer) = room.peers.get_mut(peer_id) {
+                        // Update with new candidates if provided
+                        if !candidates.is_empty() {
+                            peer.candidates = candidates;
+                        }
+                        // Also update legacy fields for backward compatibility
                         peer.public_addr = public_addr;
                         peer.local_addr = local_addr;
 

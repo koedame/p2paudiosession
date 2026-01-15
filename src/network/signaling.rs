@@ -19,13 +19,95 @@ use super::error::NetworkError;
 /// Maximum peers per room
 pub const MAX_PEERS_PER_ROOM: usize = 10;
 
-/// Peer information
+/// Address candidate type for ICE-like connection establishment
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CandidateType {
+    /// Local address (highest priority for same network)
+    Host,
+    /// Server reflexive address (public IP via STUN)
+    ServerReflexive,
+}
+
+/// A single address candidate for connection
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddressCandidate {
+    /// The socket address
+    pub address: SocketAddr,
+    /// Type of candidate
+    pub candidate_type: CandidateType,
+    /// Priority (higher = better, RFC 5245 style)
+    pub priority: u32,
+}
+
+impl AddressCandidate {
+    /// Create a new host candidate
+    pub fn host(address: SocketAddr) -> Self {
+        // Host candidates have high priority
+        // IPv6 gets slightly higher priority than IPv4 (Happy Eyeballs)
+        let type_pref: u32 = 126; // Host type preference
+        let local_pref: u32 = if address.is_ipv6() { 65535 } else { 65534 };
+        let priority = (type_pref << 24) | (local_pref << 8) | 255;
+
+        Self {
+            address,
+            candidate_type: CandidateType::Host,
+            priority,
+        }
+    }
+
+    /// Create a new server reflexive candidate (from STUN)
+    pub fn server_reflexive(address: SocketAddr) -> Self {
+        // Server reflexive has lower priority than host
+        let type_pref: u32 = 100;
+        let local_pref: u32 = if address.is_ipv6() { 65535 } else { 65534 };
+        let priority = (type_pref << 24) | (local_pref << 8) | 255;
+
+        Self {
+            address,
+            candidate_type: CandidateType::ServerReflexive,
+            priority,
+        }
+    }
+}
+
+/// Peer information with multiple address candidates
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PeerInfo {
     pub id: Uuid,
     pub name: String,
+    /// All address candidates for this peer (sorted by priority)
+    #[serde(default)]
+    pub candidates: Vec<AddressCandidate>,
+    /// Legacy: single public address (for backward compatibility)
+    #[serde(default)]
     pub public_addr: Option<SocketAddr>,
+    /// Legacy: single local address (for backward compatibility)
+    #[serde(default)]
     pub local_addr: Option<SocketAddr>,
+}
+
+impl PeerInfo {
+    /// Get all candidate addresses sorted by priority (highest first)
+    pub fn get_sorted_candidates(&self) -> Vec<SocketAddr> {
+        let mut candidates = self.candidates.clone();
+        candidates.sort_by(|a, b| b.priority.cmp(&a.priority));
+
+        let mut addrs: Vec<SocketAddr> = candidates.into_iter().map(|c| c.address).collect();
+
+        // Include legacy addresses if not already present
+        if let Some(addr) = self.public_addr {
+            if !addrs.contains(&addr) {
+                addrs.push(addr);
+            }
+        }
+        if let Some(addr) = self.local_addr {
+            if !addrs.contains(&addr) {
+                addrs.push(addr);
+            }
+        }
+
+        addrs
+    }
 }
 
 /// Room information
@@ -56,8 +138,16 @@ pub enum SignalingMessage {
         peer_name: String,
     },
     LeaveRoom,
+    /// Update peer connection information with multiple candidates
     UpdatePeerInfo {
+        /// All address candidates (preferred)
+        #[serde(default)]
+        candidates: Vec<AddressCandidate>,
+        /// Legacy: single public address
+        #[serde(default)]
         public_addr: Option<SocketAddr>,
+        /// Legacy: single local address
+        #[serde(default)]
         local_addr: Option<SocketAddr>,
     },
     ListRooms,
@@ -299,6 +389,7 @@ async fn process_message(
             let peer = PeerInfo {
                 id: peer_id,
                 name: peer_name,
+                candidates: vec![],
                 public_addr: None,
                 local_addr: None,
             };
@@ -375,6 +466,7 @@ async fn process_message(
                     let peer = PeerInfo {
                         id: peer_id,
                         name: peer_name,
+                        candidates: vec![],
                         public_addr: None,
                         local_addr: None,
                     };
@@ -426,6 +518,7 @@ async fn process_message(
         }
 
         SignalingMessage::UpdatePeerInfo {
+            candidates,
             public_addr,
             local_addr,
         } => {
@@ -435,6 +528,11 @@ async fn process_message(
                 let mut rooms_guard = rooms.write().await;
                 if let Some(room) = rooms_guard.get_mut(room_id) {
                     if let Some(peer) = room.peers.get_mut(peer_id) {
+                        // Update with new candidates if provided
+                        if !candidates.is_empty() {
+                            peer.candidates = candidates;
+                        }
+                        // Also update legacy fields for backward compatibility
                         peer.public_addr = public_addr;
                         peer.local_addr = local_addr;
 
@@ -582,6 +680,70 @@ impl SignalingConnection {
     }
 }
 
+/// Gather all address candidates for the local peer
+///
+/// This function collects:
+/// 1. Local host addresses (both IPv4 and IPv6 if available)
+/// 2. Server reflexive addresses via STUN (public IP/port mapping)
+///
+/// Candidates are returned sorted by priority (highest first).
+pub async fn gather_candidates(local_port: u16) -> Vec<AddressCandidate> {
+    use tokio::net::UdpSocket;
+
+    let mut candidates = Vec::new();
+
+    // Gather local addresses
+    // Try to get local network interfaces
+    if let Ok(addrs) = local_ip_address::list_afinet_netifas() {
+        for (_, ip) in addrs {
+            // Skip loopback addresses
+            if ip.is_loopback() {
+                continue;
+            }
+
+            let addr = SocketAddr::new(ip, local_port);
+            candidates.push(AddressCandidate::host(addr));
+            debug!("Added host candidate: {}", addr);
+        }
+    }
+
+    // Gather server reflexive addresses via STUN
+    // Try IPv4 STUN
+    if let Ok(socket) = UdpSocket::bind("0.0.0.0:0").await {
+        let stun = super::stun::StunClient::new(socket);
+        if let Ok(result) = stun.discover_public_address().await {
+            // Use the local port for the candidate (STUN maps our outbound port)
+            let addr = SocketAddr::new(result.mapped_address.ip(), local_port);
+            candidates.push(AddressCandidate::server_reflexive(addr));
+            info!("Added server reflexive candidate (IPv4): {}", addr);
+        }
+    }
+
+    // Try IPv6 STUN (if we have IPv6 connectivity)
+    if let Ok(socket) = UdpSocket::bind("[::]:0").await {
+        let stun = super::stun::StunClient::new(socket);
+        if let Ok(result) = stun.discover_public_address().await {
+            let addr = SocketAddr::new(result.mapped_address.ip(), local_port);
+            candidates.push(AddressCandidate::server_reflexive(addr));
+            info!("Added server reflexive candidate (IPv6): {}", addr);
+        }
+    }
+
+    // Sort by priority (highest first)
+    candidates.sort_by(|a, b| b.priority.cmp(&a.priority));
+
+    // Remove duplicates (same address)
+    candidates.dedup_by(|a, b| a.address == b.address);
+
+    info!("Gathered {} address candidates", candidates.len());
+    candidates
+}
+
+/// Get sorted addresses from candidates for connection attempts
+pub fn candidates_to_addrs(candidates: &[AddressCandidate]) -> Vec<SocketAddr> {
+    candidates.iter().map(|c| c.address).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -698,5 +860,101 @@ mod tests {
         // UUID-like strings should not match invite code format
         assert!(!is_invite_code_format("a1b2c3d4")); // 8-char UUID prefix
         assert!(!is_invite_code_format("a1b2c3d4-e5f6"));
+    }
+
+    #[test]
+    fn test_address_candidate_host_ipv4() {
+        let addr: std::net::SocketAddr = "192.168.1.100:5000".parse().unwrap();
+        let candidate = AddressCandidate::host(addr);
+
+        assert_eq!(candidate.address, addr);
+        assert_eq!(candidate.candidate_type, CandidateType::Host);
+        // Host type preference = 126, local_pref for IPv4 = 65534
+        assert!(candidate.priority > 0);
+    }
+
+    #[test]
+    fn test_address_candidate_host_ipv6() {
+        let addr: std::net::SocketAddr = "[::1]:5000".parse().unwrap();
+        let candidate = AddressCandidate::host(addr);
+
+        assert_eq!(candidate.address, addr);
+        assert_eq!(candidate.candidate_type, CandidateType::Host);
+        assert!(candidate.priority > 0);
+    }
+
+    #[test]
+    fn test_address_candidate_server_reflexive() {
+        let addr: std::net::SocketAddr = "203.0.113.50:5000".parse().unwrap();
+        let candidate = AddressCandidate::server_reflexive(addr);
+
+        assert_eq!(candidate.address, addr);
+        assert_eq!(candidate.candidate_type, CandidateType::ServerReflexive);
+        assert!(candidate.priority > 0);
+    }
+
+    #[test]
+    fn test_address_candidate_priority_ordering() {
+        // Host candidates should have higher priority than server reflexive
+        let host_v4 = AddressCandidate::host("192.168.1.100:5000".parse().unwrap());
+        let host_v6 = AddressCandidate::host("[2001:db8::1]:5000".parse().unwrap());
+        let srflx_v4 = AddressCandidate::server_reflexive("203.0.113.50:5000".parse().unwrap());
+        let srflx_v6 = AddressCandidate::server_reflexive("[2001:db8::2]:5000".parse().unwrap());
+
+        // Host > ServerReflexive
+        assert!(host_v4.priority > srflx_v4.priority);
+        assert!(host_v6.priority > srflx_v6.priority);
+
+        // IPv6 slightly higher than IPv4 within same type
+        assert!(host_v6.priority > host_v4.priority);
+        assert!(srflx_v6.priority > srflx_v4.priority);
+    }
+
+    #[test]
+    fn test_candidates_to_addrs() {
+        let candidates = vec![
+            AddressCandidate::host("192.168.1.100:5000".parse().unwrap()),
+            AddressCandidate::server_reflexive("203.0.113.50:5000".parse().unwrap()),
+        ];
+
+        let addrs = candidates_to_addrs(&candidates);
+
+        assert_eq!(addrs.len(), 2);
+        assert_eq!(addrs[0], "192.168.1.100:5000".parse().unwrap());
+        assert_eq!(addrs[1], "203.0.113.50:5000".parse().unwrap());
+    }
+
+    #[test]
+    fn test_candidates_to_addrs_empty() {
+        let candidates: Vec<AddressCandidate> = vec![];
+        let addrs = candidates_to_addrs(&candidates);
+        assert!(addrs.is_empty());
+    }
+
+    #[test]
+    fn test_peer_info_with_candidates() {
+        let peer = PeerInfo {
+            id: uuid::Uuid::new_v4(),
+            name: "TestPeer".to_string(),
+            candidates: vec![AddressCandidate::host(
+                "192.168.1.100:5000".parse().unwrap(),
+            )],
+            public_addr: None,
+            local_addr: None,
+        };
+
+        assert_eq!(peer.candidates.len(), 1);
+        assert_eq!(peer.candidates[0].candidate_type, CandidateType::Host);
+    }
+
+    #[test]
+    fn test_peer_info_backward_compatible_serialization() {
+        // Test that PeerInfo can be deserialized without candidates field (backward compat)
+        let json = r#"{"id":"550e8400-e29b-41d4-a716-446655440000","name":"OldPeer","public_addr":"192.168.1.1:5000","local_addr":"192.168.1.1:5000"}"#;
+        let peer: PeerInfo = serde_json::from_str(json).unwrap();
+
+        assert_eq!(peer.name, "OldPeer");
+        assert!(peer.candidates.is_empty()); // Default empty
+        assert!(peer.public_addr.is_some());
     }
 }

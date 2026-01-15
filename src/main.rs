@@ -9,8 +9,8 @@ use tracing_subscriber::FmtSubscriber;
 
 use jamjam::audio::{list_input_devices, list_output_devices, AudioConfig, AudioEngine, DeviceId};
 use jamjam::network::{
-    Connection, ConnectionStats, LatencyBreakdown, LocalLatencyInfo, PeerLatencyInfo,
-    SignalingClient, SignalingMessage,
+    candidates_to_addrs, gather_candidates, Connection, ConnectionStats, LatencyBreakdown,
+    LocalLatencyInfo, PeerLatencyInfo, SignalingClient, SignalingMessage,
 };
 
 #[derive(Parser)]
@@ -550,21 +550,49 @@ async fn run_join_room(
         }
     };
 
-    // Find a peer with an address to connect to
-    let target_peer = peers.iter().find(|p| p.public_addr.is_some());
+    // Find a peer with address(es) to connect to
+    // Prefer peers with candidates, fall back to legacy public_addr
+    let target_peer = peers
+        .iter()
+        .find(|p| !p.candidates.is_empty() || p.public_addr.is_some());
 
     if let Some(peer) = target_peer {
-        let remote_addr = peer.public_addr.unwrap();
         let peer_display_name = peer.name.clone();
-        println!("\nConnecting to peer {} at {}...", peer.name, remote_addr);
+
+        // Collect remote addresses to try (prefer candidates, fall back to legacy)
+        let remote_addrs: Vec<std::net::SocketAddr> = if !peer.candidates.is_empty() {
+            candidates_to_addrs(&peer.candidates)
+        } else if let Some(addr) = peer.public_addr {
+            vec![addr]
+        } else {
+            vec![]
+        };
+
+        println!(
+            "\nConnecting to peer {} ({} address candidates)...",
+            peer.name,
+            remote_addrs.len()
+        );
+        for (i, addr) in remote_addrs.iter().enumerate() {
+            info!("  Candidate {}: {}", i, addr);
+        }
 
         let mut connection = Connection::new("0.0.0.0:0").await?;
         let local_addr = connection.local_addr();
         info!("Local UDP socket: {}", local_addr);
 
-        // Update our peer info with UDP address
+        // Gather our local candidates
+        println!("Gathering local address candidates...");
+        let candidates = gather_candidates(local_addr.port()).await;
+        info!("Gathered {} candidates", candidates.len());
+        for c in &candidates {
+            info!("  {:?}: {}", c.candidate_type, c.address);
+        }
+
+        // Update our peer info with candidates
         conn.send(SignalingMessage::UpdatePeerInfo {
-            public_addr: Some(local_addr),
+            candidates: candidates.clone(),
+            public_addr: candidates.first().map(|c| c.address),
             local_addr: Some(local_addr),
         })
         .await?;
@@ -595,8 +623,8 @@ async fn run_join_room(
             let _ = tx_playback.try_send(samples);
         });
 
-        // Connect to remote peer (starts receive loop)
-        connection.connect(remote_addr).await?;
+        // Connect to remote peer using candidates (Happy Eyeballs style)
+        connection.connect_with_candidates(&remote_addrs).await?;
 
         println!("\nConnected to peer. Session active.");
         println!("Audio config: {:?}", config);

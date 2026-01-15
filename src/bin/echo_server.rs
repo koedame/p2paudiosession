@@ -373,6 +373,7 @@ async fn setup_signaling(
 
             // Update peer info with UDP address
             conn.send(SignalingMessage::UpdatePeerInfo {
+                candidates: vec![],
                 public_addr: Some(udp_addr),
                 local_addr: Some(udp_addr),
             })

@@ -21,11 +21,20 @@ const XOR_MAPPED_ADDRESS: u16 = 0x0020;
 /// STUN magic cookie (RFC 5389)
 const MAGIC_COOKIE: u32 = 0x2112A442;
 
-/// Default STUN servers
+/// Default STUN servers (IPv4)
 pub const DEFAULT_STUN_SERVERS: &[&str] = &[
     "stun.l.google.com:19302",
     "stun1.l.google.com:19302",
     "stun2.l.google.com:19302",
+    "stun.cloudflare.com:3478",
+];
+
+/// Default STUN servers (IPv6)
+/// Note: Currently uses same servers as IPv4, as they support both protocols
+#[allow(dead_code)]
+pub const DEFAULT_STUN_SERVERS_V6: &[&str] = &[
+    "stun.l.google.com:19302",
+    "stun1.l.google.com:19302",
     "stun.cloudflare.com:3478",
 ];
 
@@ -186,7 +195,7 @@ fn parse_binding_response(
 
         match attr_type {
             XOR_MAPPED_ADDRESS => {
-                return parse_xor_mapped_address(attr_data);
+                return parse_xor_mapped_address(attr_data, expected_txn_id);
             }
             MAPPED_ADDRESS => {
                 return parse_mapped_address(attr_data);
@@ -203,8 +212,11 @@ fn parse_binding_response(
     ))
 }
 
-/// Parse XOR-MAPPED-ADDRESS attribute
-fn parse_xor_mapped_address(data: &[u8]) -> Result<SocketAddr, NetworkError> {
+/// Parse XOR-MAPPED-ADDRESS attribute (RFC 5389)
+fn parse_xor_mapped_address(
+    data: &[u8],
+    transaction_id: &[u8; 12],
+) -> Result<SocketAddr, NetworkError> {
     if data.len() < 8 {
         return Err(NetworkError::StunFailed(
             "XOR-MAPPED-ADDRESS too short".to_string(),
@@ -224,17 +236,26 @@ fn parse_xor_mapped_address(data: &[u8]) -> Result<SocketAddr, NetworkError> {
             Ok(SocketAddr::new(ip.into(), port))
         }
         0x02 => {
-            // IPv6
+            // IPv6: XOR with magic cookie (4 bytes) + transaction ID (12 bytes)
             if data.len() < 20 {
                 return Err(NetworkError::StunFailed(
                     "XOR-MAPPED-ADDRESS IPv6 too short".to_string(),
                 ));
             }
-            // For IPv6, XOR with magic cookie + transaction ID
-            // Simplified: just return error for now
-            Err(NetworkError::StunFailed(
-                "IPv6 not yet supported".to_string(),
-            ))
+
+            // Build XOR mask: magic cookie + transaction ID
+            let mut xor_mask = [0u8; 16];
+            xor_mask[0..4].copy_from_slice(&MAGIC_COOKIE.to_be_bytes());
+            xor_mask[4..16].copy_from_slice(transaction_id);
+
+            // XOR the address
+            let mut ip_bytes = [0u8; 16];
+            for i in 0..16 {
+                ip_bytes[i] = data[4 + i] ^ xor_mask[i];
+            }
+
+            let ip = std::net::Ipv6Addr::from(ip_bytes);
+            Ok(SocketAddr::new(ip.into(), port))
         }
         _ => Err(NetworkError::StunFailed(format!(
             "Unknown address family: {}",
@@ -262,9 +283,15 @@ fn parse_mapped_address(data: &[u8]) -> Result<SocketAddr, NetworkError> {
         }
         0x02 => {
             // IPv6
-            Err(NetworkError::StunFailed(
-                "IPv6 not yet supported".to_string(),
-            ))
+            if data.len() < 20 {
+                return Err(NetworkError::StunFailed(
+                    "MAPPED-ADDRESS IPv6 too short".to_string(),
+                ));
+            }
+            let mut ip_bytes = [0u8; 16];
+            ip_bytes.copy_from_slice(&data[4..20]);
+            let ip = std::net::Ipv6Addr::from(ip_bytes);
+            Ok(SocketAddr::new(ip.into(), port))
         }
         _ => Err(NetworkError::StunFailed(format!(
             "Unknown address family: {}",
@@ -303,14 +330,68 @@ mod tests {
         // XOR-MAPPED-ADDRESS for 192.168.1.100:5000
         // XOR port: 5000 (0x1388) ^ 0x2112 = 0x329A
         // XOR addr: 192.168.1.100 (0xC0A80164) ^ 0x2112A442 = 0xE1BAA526
+        let txn_id = [0u8; 12]; // Not used for IPv4
         let data = [
             0x00, 0x01, // Reserved + Family (IPv4)
             0x32, 0x9A, // XOR'd port
             0xE1, 0xBA, 0xA5, 0x26, // XOR'd address
         ];
 
-        let result = parse_xor_mapped_address(&data).unwrap();
+        let result = parse_xor_mapped_address(&data, &txn_id).unwrap();
         assert_eq!(result.port(), 5000);
         assert_eq!(result.ip().to_string(), "192.168.1.100");
+    }
+
+    #[test]
+    fn test_parse_xor_mapped_address_ipv6() {
+        // XOR-MAPPED-ADDRESS for 2001:db8::1:5000
+        // IPv6 address: 2001:0db8:0000:0000:0000:0000:0000:0001
+        // XOR mask: magic cookie (0x2112A442) + transaction ID
+        let txn_id: [u8; 12] = [
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
+        ];
+
+        // Original IPv6: 2001:0db8:0000:0000:0000:0000:0000:0001
+        let original_ip: [u8; 16] = [
+            0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x01,
+        ];
+
+        // XOR mask: magic cookie + transaction ID
+        let mut xor_mask = [0u8; 16];
+        xor_mask[0..4].copy_from_slice(&MAGIC_COOKIE.to_be_bytes());
+        xor_mask[4..16].copy_from_slice(&txn_id);
+
+        // XOR the address
+        let mut xored_ip = [0u8; 16];
+        for i in 0..16 {
+            xored_ip[i] = original_ip[i] ^ xor_mask[i];
+        }
+
+        // XOR port: 5000 ^ 0x2112 = 0x329A
+        let mut data = vec![
+            0x00, 0x02, // Reserved + Family (IPv6)
+            0x32, 0x9A, // XOR'd port
+        ];
+        data.extend_from_slice(&xored_ip);
+
+        let result = parse_xor_mapped_address(&data, &txn_id).unwrap();
+        assert_eq!(result.port(), 5000);
+        assert_eq!(result.ip().to_string(), "2001:db8::1");
+    }
+
+    #[test]
+    fn test_parse_mapped_address_ipv6() {
+        // MAPPED-ADDRESS for 2001:db8::1:8080
+        let data = [
+            0x00, 0x02, // Reserved + Family (IPv6)
+            0x1F, 0x90, // Port (8080)
+            0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x01,
+        ];
+
+        let result = parse_mapped_address(&data).unwrap();
+        assert_eq!(result.port(), 8080);
+        assert_eq!(result.ip().to_string(), "2001:db8::1");
     }
 }

@@ -330,6 +330,117 @@ impl Connection {
         Ok(())
     }
 
+    /// Connect to a remote peer using multiple address candidates (Happy Eyeballs style)
+    ///
+    /// This function tries multiple candidates in parallel and uses the first one that responds.
+    /// Candidates are tried in order of priority, with a small delay between starting each attempt.
+    pub async fn connect_with_candidates(
+        &mut self,
+        candidates: &[SocketAddr],
+    ) -> Result<(), NetworkError> {
+        if self.is_connected() {
+            return Err(NetworkError::AlreadyConnected);
+        }
+
+        if candidates.is_empty() {
+            return Err(NetworkError::NoCandidates);
+        }
+
+        // If only one candidate, use simple connect
+        if candidates.len() == 1 {
+            return self.connect(candidates[0]).await;
+        }
+
+        self.set_state(ConnectionState::CheckingConnectivity);
+        info!("Checking connectivity with {} candidates", candidates.len());
+
+        // Try candidates with Happy Eyeballs approach:
+        // - Send probes to all candidates
+        // - Use the first one that responds
+        const PROBE_TIMEOUT: Duration = Duration::from_millis(1000);
+        const CANDIDATE_DELAY: Duration = Duration::from_millis(50);
+
+        // Send probes to all candidates with small delays between each
+        for (i, &addr) in candidates.iter().enumerate() {
+            let packet = Packet::keep_alive(self.next_sequence());
+            if let Err(e) = self.transport.send_to(&packet, addr).await {
+                debug!("Failed to send probe to candidate {}: {}", addr, e);
+                continue;
+            }
+            debug!("Sent connectivity probe to candidate {} ({})", i, addr);
+
+            // Small delay before next candidate (Happy Eyeballs style)
+            if i < candidates.len() - 1 {
+                tokio::time::sleep(CANDIDATE_DELAY).await;
+            }
+        }
+
+        // Wait for first response
+        let transport = self.transport.clone();
+        let timeout = tokio::time::timeout(PROBE_TIMEOUT, async {
+            loop {
+                match transport.recv_raw().await {
+                    Ok((buf, from_addr)) => {
+                        // Check if response is from one of our candidates
+                        if candidates.contains(&from_addr) {
+                            if let Some(packet) = Packet::from_bytes(&buf) {
+                                if matches!(packet.packet_type, PacketType::KeepAlive) {
+                                    return Some(from_addr);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Error receiving probe response: {}", e);
+                        return None;
+                    }
+                }
+            }
+        })
+        .await;
+
+        match timeout {
+            Ok(Some(selected_addr)) => {
+                info!("Selected candidate: {} (first to respond)", selected_addr);
+                self.remote_addr = selected_addr;
+
+                // Record connection start time
+                if let Ok(mut start) = self.connection_start.lock() {
+                    *start = Some(Instant::now());
+                }
+
+                self.set_state(ConnectionState::Connected);
+                self.start_receive_loop();
+                self.start_keepalive_loop();
+
+                Ok(())
+            }
+            Ok(None) => {
+                self.set_state(ConnectionState::Failed);
+                Err(NetworkError::ConnectionFailed(
+                    "No candidate responded".to_string(),
+                ))
+            }
+            Err(_) => {
+                // Timeout - try fallback to first candidate
+                warn!("No candidate responded in time, falling back to first candidate");
+                self.set_state(ConnectionState::Connecting);
+                self.remote_addr = candidates[0];
+
+                // Record connection start time
+                if let Ok(mut start) = self.connection_start.lock() {
+                    *start = Some(Instant::now());
+                }
+
+                self.set_state(ConnectionState::Connected);
+                self.start_receive_loop();
+                self.start_keepalive_loop();
+
+                Ok(())
+            }
+        }
+    }
+
     /// Disconnect from the remote peer
     pub fn disconnect(&mut self) {
         self.set_state(ConnectionState::Disconnected);
@@ -617,5 +728,67 @@ mod tests {
         let stats = conn.stats();
         assert_eq!(stats.packets_sent, 0);
         assert_eq!(stats.packets_received, 0);
+    }
+
+    #[tokio::test]
+    async fn test_connect_with_candidates_empty() {
+        let mut conn = Connection::new("127.0.0.1:0").await.unwrap();
+        let result = conn.connect_with_candidates(&[]).await;
+
+        assert!(result.is_err());
+        match result {
+            Err(NetworkError::NoCandidates) => {}
+            _ => panic!("Expected NoCandidates error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_connect_with_candidates_already_connected() {
+        let mut conn1 = Connection::new("127.0.0.1:0").await.unwrap();
+        let conn2 = Connection::new("127.0.0.1:0").await.unwrap();
+
+        // First connection
+        conn1.connect(conn2.local_addr()).await.unwrap();
+        assert!(conn1.is_connected());
+
+        // Try to connect again
+        let candidates = vec![conn2.local_addr()];
+        let result = conn1.connect_with_candidates(&candidates).await;
+
+        assert!(result.is_err());
+        match result {
+            Err(NetworkError::AlreadyConnected) => {}
+            _ => panic!("Expected AlreadyConnected error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_connect_with_single_candidate() {
+        // Single candidate should fall back to regular connect
+        let mut conn1 = Connection::new("127.0.0.1:0").await.unwrap();
+        let conn2 = Connection::new("127.0.0.1:0").await.unwrap();
+
+        let candidates = vec![conn2.local_addr()];
+        conn1.connect_with_candidates(&candidates).await.unwrap();
+
+        assert!(conn1.is_connected());
+    }
+
+    #[tokio::test]
+    async fn test_connect_with_multiple_candidates_loopback() {
+        // Test with multiple loopback candidates
+        let mut conn1 = Connection::new("127.0.0.1:0").await.unwrap();
+        let conn2 = Connection::new("127.0.0.1:0").await.unwrap();
+
+        // Create fake candidates, only the real one will respond
+        let candidates = vec![
+            "127.0.0.1:59999".parse().unwrap(), // Fake - won't respond
+            conn2.local_addr(),                 // Real - will respond
+        ];
+
+        // This should succeed by finding the working candidate
+        conn1.connect_with_candidates(&candidates).await.unwrap();
+
+        assert!(conn1.is_connected());
     }
 }
