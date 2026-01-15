@@ -37,6 +37,7 @@ impl Default for SignalingState {
 pub struct JoinResult {
     pub room_id: String,
     pub peer_id: String,
+    pub invite_code: String,
     pub peers: Vec<PeerInfo>,
 }
 
@@ -119,6 +120,7 @@ pub async fn signaling_join_room(
         } => Ok(JoinResult {
             room_id,
             peer_id: peer_id.to_string(),
+            invite_code: String::new(), // Not returned when joining existing room
             peers,
         }),
         SignalingMessage::Error { message } => Err(message),
@@ -166,9 +168,14 @@ pub async fn signaling_create_room(
     .map_err(|e| e.to_string())?;
 
     match conn.recv().await.map_err(|e| e.to_string())? {
-        SignalingMessage::RoomCreated { room_id, peer_id } => Ok(JoinResult {
+        SignalingMessage::RoomCreated {
+            room_id,
+            peer_id,
+            invite_code,
+        } => Ok(JoinResult {
             room_id,
             peer_id: peer_id.to_string(),
+            invite_code,
             peers: vec![],
         }),
         SignalingMessage::Error { message } => Err(message),

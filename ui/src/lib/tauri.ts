@@ -15,6 +15,7 @@ export interface RoomInfo {
   peer_count: number;
   max_peers: number;
   has_password: boolean;
+  invite_code: string;
 }
 
 /**
@@ -33,6 +34,7 @@ export interface PeerInfo {
 export interface JoinResult {
   room_id: string;
   peer_id: string;
+  invite_code: string;
   peers: PeerInfo[];
 }
 
@@ -306,4 +308,54 @@ export async function streamingSetOutputDevice(
   deviceId: string | null
 ): Promise<void> {
   return invoke("streaming_set_output_device", { deviceId });
+}
+
+// ============================================================================
+// Configuration API
+// ============================================================================
+
+/**
+ * Application configuration
+ */
+export interface AppConfig {
+  /** Selected input device ID (null = system default) */
+  input_device_id: string | null;
+  /** Selected output device ID (null = system default) */
+  output_device_id: string | null;
+  /** Audio buffer size in samples. Valid values: 32, 64, 128, 256 */
+  buffer_size: number;
+  /** Custom signaling server URL (null = use default server) */
+  signaling_server_url: string | null;
+}
+
+/**
+ * Load configuration from disk
+ * @returns The current configuration (from file or defaults if file doesn't exist)
+ */
+export async function configLoad(): Promise<AppConfig> {
+  return invoke("config_load");
+}
+
+/**
+ * Save configuration to disk
+ * @param config The configuration to save
+ */
+export async function configSave(config: AppConfig): Promise<void> {
+  return invoke("config_save", { config });
+}
+
+/**
+ * Get the signaling server URL from configuration
+ * @returns The custom server URL, or null if using default
+ */
+export async function configGetServerUrl(): Promise<string | null> {
+  return invoke("config_get_server_url");
+}
+
+/**
+ * Set the signaling server URL in configuration
+ * @param url The server URL, or null to use default
+ */
+export async function configSetServerUrl(url: string | null): Promise<void> {
+  return invoke("config_set_server_url", { url });
 }

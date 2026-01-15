@@ -23,7 +23,10 @@ use tokio_tungstenite::tungstenite::Message;
 use tracing::{error, info, warn, Level};
 use uuid::Uuid;
 
-use jamjam::network::{PeerInfo, RoomInfo, SignalingMessage, SignalingServer, MAX_PEERS_PER_ROOM};
+use jamjam::network::{
+    generate_invite_code, is_invite_code_format, PeerInfo, RoomInfo, SignalingMessage,
+    SignalingServer, MAX_PEERS_PER_ROOM,
+};
 
 /// Signaling server for jamjam P2P audio sessions
 #[derive(Parser, Debug)]
@@ -159,6 +162,8 @@ struct RoomState {
     password: Option<String>,
     peers: HashMap<Uuid, PeerInfo>,
     broadcast_tx: broadcast::Sender<SignalingMessage>,
+    /// 6-character invite code for easy room sharing
+    invite_code: String,
 }
 
 /// Run the signaling server with TLS support
@@ -326,6 +331,20 @@ async fn process_message(
             let peer_id = Uuid::new_v4();
             let (tx, rx) = broadcast::channel(100);
 
+            // Generate unique invite code (retry if collision)
+            let invite_code = {
+                let rooms_guard = rooms.read().await;
+                let mut code = generate_invite_code();
+                let mut attempts = 0;
+                const MAX_ATTEMPTS: u32 = 100;
+                while rooms_guard.values().any(|r| r.invite_code == code) && attempts < MAX_ATTEMPTS
+                {
+                    code = generate_invite_code();
+                    attempts += 1;
+                }
+                code
+            };
+
             let peer = PeerInfo {
                 id: peer_id,
                 name: peer_name,
@@ -342,6 +361,7 @@ async fn process_message(
                 password,
                 peers,
                 broadcast_tx: tx,
+                invite_code: invite_code.clone(),
             };
 
             rooms.write().await.insert(room_id.clone(), room);
@@ -349,9 +369,16 @@ async fn process_message(
             *current_peer_id = Some(peer_id);
             *broadcast_rx = Some(rx);
 
-            info!("Room {} created by peer {}", room_id, peer_id);
+            info!(
+                "Room {} (invite: {}) created by peer {}",
+                room_id, invite_code, peer_id
+            );
 
-            Some(SignalingMessage::RoomCreated { room_id, peer_id })
+            Some(SignalingMessage::RoomCreated {
+                room_id,
+                peer_id,
+                invite_code,
+            })
         }
 
         SignalingMessage::JoinRoom {
@@ -361,7 +388,23 @@ async fn process_message(
         } => {
             let mut rooms_guard = rooms.write().await;
 
-            match rooms_guard.get_mut(&room_id) {
+            // Look up room by ID or invite code
+            let actual_room_id = if is_invite_code_format(&room_id) {
+                // Search by invite code
+                rooms_guard
+                    .values()
+                    .find(|r| r.invite_code == room_id)
+                    .map(|r| r.id.clone())
+            } else {
+                // Direct room ID lookup
+                if rooms_guard.contains_key(&room_id) {
+                    Some(room_id.clone())
+                } else {
+                    None
+                }
+            };
+
+            match actual_room_id.and_then(|id| rooms_guard.get_mut(&id)) {
                 Some(room) => {
                     if room.password.is_some() && room.password != password {
                         return Some(SignalingMessage::Error {
@@ -384,17 +427,18 @@ async fn process_message(
                     };
 
                     let peers: Vec<PeerInfo> = room.peers.values().cloned().collect();
+                    let actual_room_id = room.id.clone();
                     room.peers.insert(peer_id, peer.clone());
 
                     let _ = room
                         .broadcast_tx
                         .send(SignalingMessage::PeerJoined { peer });
 
-                    *current_room = Some(room_id.clone());
+                    *current_room = Some(actual_room_id.clone());
                     *current_peer_id = Some(peer_id);
                     *broadcast_rx = Some(room.broadcast_tx.subscribe());
 
-                    info!("Peer {} joined room {}", peer_id, room_id);
+                    info!("Peer {} joined room {}", peer_id, actual_room_id);
                     for p in &peers {
                         info!(
                             "  Existing peer: {} ({}) public_addr={:?}",
@@ -403,7 +447,7 @@ async fn process_message(
                     }
 
                     Some(SignalingMessage::RoomJoined {
-                        room_id,
+                        room_id: actual_room_id,
                         peer_id,
                         peers,
                     })
@@ -465,6 +509,7 @@ async fn process_message(
                     peer_count: room.peers.len(),
                     max_peers: MAX_PEERS_PER_ROOM,
                     has_password: room.password.is_some(),
+                    invite_code: room.invite_code.clone(),
                 })
                 .collect();
 

@@ -15,6 +15,9 @@ import {
   streamingStatus,
   streamingSetInputDevice,
   streamingSetOutputDevice,
+  configLoad,
+  configSave,
+  type AppConfig,
 } from "../lib/tauri";
 import { DeviceSelector } from "../components/DeviceSelector";
 import "./SettingsScreen.css";
@@ -90,12 +93,36 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
     loadDevices();
   }, []);
 
+  // Save current settings to config file
+  const saveConfig = async (inputId: string | null, outputId: string | null, bufSize: number) => {
+    try {
+      const config = await configLoad().catch(() => ({
+        input_device_id: null,
+        output_device_id: null,
+        buffer_size: 64,
+        signaling_server_url: null,
+      } as AppConfig));
+
+      await configSave({
+        ...config,
+        input_device_id: inputId,
+        output_device_id: outputId,
+        buffer_size: bufSize,
+      });
+    } catch (e) {
+      console.error("Failed to save config:", e);
+    }
+  };
+
   const handleInputChange = async (deviceId: string) => {
     try {
       setError(null);
       // Always save to AudioState
       await audioSetInputDevice(deviceId);
       setSelectedInputId(deviceId);
+
+      // Save to config file
+      await saveConfig(deviceId, selectedOutputId, bufferSize);
 
       // If streaming is active, also update the running stream
       try {
@@ -118,6 +145,9 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
       await audioSetOutputDevice(deviceId);
       setSelectedOutputId(deviceId);
 
+      // Save to config file
+      await saveConfig(selectedInputId, deviceId, bufferSize);
+
       // If streaming is active, also update the running stream
       try {
         const status = await streamingStatus();
@@ -137,6 +167,9 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
       setError(null);
       await audioSetBufferSize(newSize);
       setBufferSize(newSize);
+
+      // Save to config file
+      await saveConfig(selectedInputId, selectedOutputId, newSize);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }

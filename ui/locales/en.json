@@ -57,7 +57,9 @@
     "invite": {
       "code": "Invite Code",
       "url": "Invite URL",
-      "copied": "Copied"
+      "copied": "Copied",
+      "joinByCode": "Join by Invite Code",
+      "shareHint": "Share this code with others to join"
     },
     "participant": {
       "count_one": "{{count}} participant",

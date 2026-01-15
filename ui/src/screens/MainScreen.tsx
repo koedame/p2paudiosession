@@ -20,6 +20,8 @@ import {
   streamingStatus,
   audioGetCurrentDevices,
   audioGetBufferSize,
+  configLoad,
+  configSetServerUrl,
   type RoomInfo,
   type PeerInfo,
   type NetworkStats,
@@ -48,6 +50,8 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
   const [connectionId, setConnectionId] = useState<number | null>(null);
   const [peerName, setPeerName] = useState("User");
   const [roomName, setRoomName] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [currentInviteCode, setCurrentInviteCode] = useState("");
   const [networkStats, setNetworkStats] = useState<NetworkStats | null>(null);
   const [detailedLatency, setDetailedLatency] = useState<DetailedLatency | null>(null);
 
@@ -55,6 +59,22 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
   useEffect(() => {
     document.documentElement.lang = i18n.language;
   }, [i18n.language]);
+
+  // Load saved configuration on mount
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const config = await configLoad();
+        if (config.signaling_server_url) {
+          setServerUrl(config.signaling_server_url);
+        }
+      } catch (e) {
+        // Config file might not exist yet, use defaults
+        console.log("No saved config found, using defaults");
+      }
+    };
+    loadConfig();
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -101,6 +121,13 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
     try {
       const connId = await signalingConnect(serverUrl);
       setConnectionId(connId);
+
+      // Save the server URL to config
+      try {
+        await configSetServerUrl(serverUrl);
+      } catch (e) {
+        console.error("Failed to save server URL to config:", e);
+      }
 
       const rooms = await signalingListRooms(connId);
       setSessionState({ status: "server_connected", rooms });
@@ -152,6 +179,7 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
         roomName || "My Room",
         peerName
       );
+      setCurrentInviteCode(result.invite_code);
       setSessionState({
         status: "connected",
         roomCode: result.room_id,
@@ -165,6 +193,12 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
     }
   };
 
+  // Handle join by invite code
+  const handleJoinByCode = async () => {
+    if (connectionId === null || !inviteCode.trim()) return;
+    await handleJoinRoom(inviteCode.trim().toUpperCase());
+  };
+
   // Handle room join
   const handleJoinRoom = async (roomId: string) => {
     if (connectionId === null) return;
@@ -173,6 +207,7 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
 
     try {
       const result = await signalingJoinRoom(connectionId, roomId, peerName);
+      setCurrentInviteCode(result.invite_code || "");
       setSessionState({
         status: "connected",
         roomCode: result.room_id,
@@ -226,6 +261,8 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
       }
 
       await signalingLeaveRoom(connectionId);
+      setCurrentInviteCode("");
+      setInviteCode("");
       const rooms = await signalingListRooms(connectionId);
       setSessionState({ status: "server_connected", rooms });
     } catch (e) {
@@ -348,6 +385,31 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
 
           <div className="main-card__divider">{t("common.label.or")}</div>
 
+          <div className="main-card__join-code-section">
+            <label className="main-card__join-label">
+              {t("session.invite.joinByCode", "Join by Invite Code")}
+            </label>
+            <div className="main-card__join-input-group">
+              <input
+                type="text"
+                className="main-card__join-input main-card__join-input--code"
+                placeholder="ABC123"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value.toUpperCase().slice(0, 6))}
+                maxLength={6}
+              />
+              <button
+                className="main-card__join-btn"
+                onClick={handleJoinByCode}
+                disabled={inviteCode.length !== 6}
+              >
+                {t("session.join.button")}
+              </button>
+            </div>
+          </div>
+
+          <div className="main-card__divider">{t("common.label.or")}</div>
+
           <div className="main-card__create-section">
             <label className="main-card__join-label">
               {t("signaling.room.name", "Room Name")}
@@ -426,7 +488,10 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
                 letterSpacing: "0.1em",
               }}
             >
-              {sessionState.roomCode}
+              {currentInviteCode || sessionState.roomCode.slice(0, 6).toUpperCase()}
+            </p>
+            <p style={{ color: "var(--color-text-tertiary)", fontSize: "var(--font-size-sm)", marginTop: "var(--space-xs)" }}>
+              {t("session.invite.shareHint", "Share this code with others to join")}
             </p>
           </div>
 

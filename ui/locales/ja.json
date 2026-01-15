@@ -57,7 +57,9 @@
     "invite": {
       "code": "招待コード",
       "url": "招待URL",
-      "copied": "コピーしました"
+      "copied": "コピーしました",
+      "joinByCode": "招待コードで参加",
+      "shareHint": "このコードを共有して他の人を招待できます"
     },
     "participant": {
       "count": "{{count}}名参加中",

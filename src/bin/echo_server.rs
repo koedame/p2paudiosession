@@ -361,8 +361,15 @@ async fn setup_signaling(
     // Wait for RoomCreated response
     let response = conn.recv().await?;
     match response {
-        SignalingMessage::RoomCreated { room_id, peer_id } => {
-            info!("Room created: {} (peer_id: {})", room_id, peer_id);
+        SignalingMessage::RoomCreated {
+            room_id,
+            peer_id,
+            invite_code,
+        } => {
+            info!(
+                "Room created: {} (invite: {}, peer_id: {})",
+                room_id, invite_code, peer_id
+            );
 
             // Update peer info with UDP address
             conn.send(SignalingMessage::UpdatePeerInfo {

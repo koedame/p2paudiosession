@@ -1,0 +1,10 @@
+{"event":"subagent_stop","timestamp":"2026-01-15T02:38:36Z","agent_id":"unknown","transcript_path":"","transcript_preview":""}
+{"event":"subagent_stop","timestamp":"2026-01-15T03:08:53Z","agent_id":"unknown","transcript_path":"","transcript_preview":""}
+{"event":"subagent_stop","timestamp":"2026-01-15T03:19:17Z","agent_id":"unknown","transcript_path":"","transcript_preview":""}
+{"event":"subagent_stop","timestamp":"2026-01-15T03:22:33Z","agent_id":"unknown","transcript_path":"","transcript_preview":""}
+{"event":"subagent_stop","timestamp":"2026-01-15T03:49:00Z","agent_id":"unknown","transcript_path":"","transcript_preview":""}
+{"event":"subagent_stop","timestamp":"2026-01-15T04:02:13Z","agent_id":"unknown","transcript_path":"","transcript_preview":""}
+{"event":"subagent_start","timestamp":"2026-01-15T04:03:22Z","agent_id":"unknown"}
+{"event":"subagent_start","timestamp":"2026-01-15T04:03:22Z","agent_id":"unknown"}
+{"event":"subagent_stop","timestamp":"2026-01-15T04:06:16Z","agent_id":"unknown","transcript_path":"","transcript_preview":""}
+{"event":"subagent_stop","timestamp":"2026-01-15T04:08:41Z","agent_id":"unknown","transcript_path":"","transcript_preview":""}

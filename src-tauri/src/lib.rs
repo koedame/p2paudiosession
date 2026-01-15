@@ -3,10 +3,12 @@
 //! Provides IPC commands for signaling server, audio device, and streaming management.
 
 mod audio;
+mod config;
 mod signaling;
 mod streaming;
 
 use audio::AudioState;
+use config::ConfigState;
 use signaling::SignalingState;
 use streaming::StreamingState;
 
@@ -22,6 +24,7 @@ pub fn run() {
         .manage(SignalingState::new())
         .manage(AudioState::new())
         .manage(StreamingState::new())
+        .manage(ConfigState::new())
         .invoke_handler(tauri::generate_handler![
             greet,
             signaling::signaling_connect,
@@ -42,6 +45,10 @@ pub fn run() {
             streaming::streaming_status,
             streaming::streaming_set_input_device,
             streaming::streaming_set_output_device,
+            config::config_load,
+            config::config_save,
+            config::config_get_server_url,
+            config::config_set_server_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

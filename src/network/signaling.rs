@@ -36,6 +36,8 @@ pub struct RoomInfo {
     pub peer_count: usize,
     pub max_peers: usize,
     pub has_password: bool,
+    /// 6-character invite code for easy room sharing
+    pub invite_code: String,
 }
 
 /// Signaling message types
@@ -64,6 +66,8 @@ pub enum SignalingMessage {
     RoomCreated {
         room_id: String,
         peer_id: Uuid,
+        /// 6-character invite code for easy room sharing
+        invite_code: String,
     },
     RoomJoined {
         room_id: String,
@@ -94,6 +98,8 @@ struct Room {
     password: Option<String>,
     peers: HashMap<Uuid, PeerInfo>,
     broadcast_tx: broadcast::Sender<SignalingMessage>,
+    /// 6-character invite code for easy room sharing
+    invite_code: String,
 }
 
 /// Signaling server state
@@ -146,6 +152,7 @@ impl SignalingServer {
                 peer_count: room.peers.len(),
                 max_peers: MAX_PEERS_PER_ROOM,
                 has_password: room.password.is_some(),
+                invite_code: room.invite_code.clone(),
             })
             .collect()
     }
@@ -275,6 +282,20 @@ async fn process_message(
             let peer_id = Uuid::new_v4();
             let (tx, rx) = broadcast::channel(100);
 
+            // Generate unique invite code (retry if collision)
+            let invite_code = {
+                let rooms_guard = rooms.read().await;
+                let mut code = generate_invite_code();
+                let mut attempts = 0;
+                const MAX_ATTEMPTS: u32 = 100;
+                while rooms_guard.values().any(|r| r.invite_code == code) && attempts < MAX_ATTEMPTS
+                {
+                    code = generate_invite_code();
+                    attempts += 1;
+                }
+                code
+            };
+
             let peer = PeerInfo {
                 id: peer_id,
                 name: peer_name,
@@ -291,6 +312,7 @@ async fn process_message(
                 password,
                 peers,
                 broadcast_tx: tx,
+                invite_code: invite_code.clone(),
             };
 
             rooms.write().await.insert(room_id.clone(), room);
@@ -298,9 +320,16 @@ async fn process_message(
             *current_peer_id = Some(peer_id);
             *broadcast_rx = Some(rx);
 
-            info!("Room {} created by peer {}", room_id, peer_id);
+            info!(
+                "Room {} (invite: {}) created by peer {}",
+                room_id, invite_code, peer_id
+            );
 
-            Some(SignalingMessage::RoomCreated { room_id, peer_id })
+            Some(SignalingMessage::RoomCreated {
+                room_id,
+                peer_id,
+                invite_code,
+            })
         }
 
         SignalingMessage::JoinRoom {
@@ -310,7 +339,23 @@ async fn process_message(
         } => {
             let mut rooms_guard = rooms.write().await;
 
-            match rooms_guard.get_mut(&room_id) {
+            // Look up room by ID or invite code
+            let actual_room_id = if is_invite_code_format(&room_id) {
+                // Search by invite code
+                rooms_guard
+                    .values()
+                    .find(|r| r.invite_code == room_id)
+                    .map(|r| r.id.clone())
+            } else {
+                // Direct room ID lookup
+                if rooms_guard.contains_key(&room_id) {
+                    Some(room_id.clone())
+                } else {
+                    None
+                }
+            };
+
+            match actual_room_id.and_then(|id| rooms_guard.get_mut(&id)) {
                 Some(room) => {
                     // Check password
                     if room.password.is_some() && room.password != password {
@@ -335,6 +380,7 @@ async fn process_message(
                     };
 
                     let peers: Vec<PeerInfo> = room.peers.values().cloned().collect();
+                    let actual_room_id = room.id.clone();
                     room.peers.insert(peer_id, peer.clone());
 
                     // Notify existing peers
@@ -342,14 +388,14 @@ async fn process_message(
                         .broadcast_tx
                         .send(SignalingMessage::PeerJoined { peer });
 
-                    *current_room = Some(room_id.clone());
+                    *current_room = Some(actual_room_id.clone());
                     *current_peer_id = Some(peer_id);
                     *broadcast_rx = Some(room.broadcast_tx.subscribe());
 
-                    info!("Peer {} joined room {}", peer_id, room_id);
+                    info!("Peer {} joined room {}", peer_id, actual_room_id);
 
                     Some(SignalingMessage::RoomJoined {
-                        room_id,
+                        room_id: actual_room_id,
                         peer_id,
                         peers,
                     })
@@ -411,6 +457,7 @@ async fn process_message(
                     peer_count: room.peers.len(),
                     max_peers: MAX_PEERS_PER_ROOM,
                     has_password: room.password.is_some(),
+                    invite_code: room.invite_code.clone(),
                 })
                 .collect();
 
@@ -427,6 +474,31 @@ fn generate_room_id() -> String {
     let id = Uuid::new_v4();
     // Take first 8 characters of UUID
     id.to_string()[..8].to_string()
+}
+
+/// Characters used for invite code generation.
+/// Excludes visually confusing characters: 0, O, I, 1, L
+const INVITE_CODE_CHARS: &[u8] = b"ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+/// Length of invite codes
+const INVITE_CODE_LENGTH: usize = 6;
+
+/// Generate a 6-character invite code using readable characters.
+/// Uses characters A-H, J-N, P-Z, 2-9 (excludes 0, O, I, 1, L for readability).
+pub fn generate_invite_code() -> String {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    (0..INVITE_CODE_LENGTH)
+        .map(|_| {
+            let idx = rng.gen_range(0..INVITE_CODE_CHARS.len());
+            INVITE_CODE_CHARS[idx] as char
+        })
+        .collect()
+}
+
+/// Check if a string matches the invite code format (6 uppercase alphanumeric characters).
+pub fn is_invite_code_format(s: &str) -> bool {
+    s.len() == INVITE_CODE_LENGTH && s.chars().all(|c| INVITE_CODE_CHARS.contains(&(c as u8)))
 }
 
 /// Signaling client for connecting to a signaling server
@@ -543,5 +615,88 @@ mod tests {
             }
             _ => panic!("Wrong message type"),
         }
+    }
+
+    #[test]
+    fn test_generate_invite_code_length() {
+        let code = generate_invite_code();
+        assert_eq!(code.len(), INVITE_CODE_LENGTH);
+    }
+
+    #[test]
+    fn test_generate_invite_code_valid_chars() {
+        // Generate multiple codes to test character validity
+        for _ in 0..100 {
+            let code = generate_invite_code();
+            for c in code.chars() {
+                assert!(
+                    INVITE_CODE_CHARS.contains(&(c as u8)),
+                    "Invalid character '{}' in invite code",
+                    c
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_generate_invite_code_excludes_confusing_chars() {
+        // Generate many codes and verify excluded characters never appear
+        let excluded_chars = ['0', 'O', 'I', '1', 'L'];
+        for _ in 0..1000 {
+            let code = generate_invite_code();
+            for c in excluded_chars {
+                assert!(
+                    !code.contains(c),
+                    "Invite code '{}' contains excluded character '{}'",
+                    code,
+                    c
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_generate_invite_code_uniqueness() {
+        // Generate many codes and check for uniqueness (probabilistic test)
+        use std::collections::HashSet;
+        let mut codes = HashSet::new();
+        for _ in 0..1000 {
+            let code = generate_invite_code();
+            codes.insert(code);
+        }
+        // With 29^6 possible codes (~594M), 1000 codes should all be unique
+        assert_eq!(codes.len(), 1000);
+    }
+
+    #[test]
+    fn test_is_invite_code_format_valid() {
+        assert!(is_invite_code_format("ABC234"));
+        assert!(is_invite_code_format("HJKMNP"));
+        assert!(is_invite_code_format("QRSTUV"));
+        assert!(is_invite_code_format("WXY789"));
+    }
+
+    #[test]
+    fn test_is_invite_code_format_invalid_length() {
+        assert!(!is_invite_code_format("ABC23")); // Too short
+        assert!(!is_invite_code_format("ABC2345")); // Too long
+        assert!(!is_invite_code_format("")); // Empty
+    }
+
+    #[test]
+    fn test_is_invite_code_format_invalid_chars() {
+        assert!(!is_invite_code_format("ABC230")); // Contains '0'
+        assert!(!is_invite_code_format("ABCDE1")); // Contains '1'
+        assert!(!is_invite_code_format("ABCDEO")); // Contains 'O'
+        assert!(!is_invite_code_format("ABCDEI")); // Contains 'I'
+        assert!(!is_invite_code_format("ABCDEL")); // Contains 'L'
+        assert!(!is_invite_code_format("abc234")); // Lowercase
+    }
+
+    #[test]
+    fn test_is_invite_code_format_uuid_like_strings() {
+        // UUID-like strings should not match invite code format
+        assert!(!is_invite_code_format("a1b2c3d4")); // 8-char UUID prefix
+        assert!(!is_invite_code_format("a1b2c3d4-e5f6"));
     }
 }

@@ -27,8 +27,8 @@ pub use latency::{
 pub use sequence_tracker::SequenceTracker;
 pub use session::{Session, SessionConfig};
 pub use signaling::{
-    PeerInfo, RoomInfo, SignalingClient, SignalingConnection, SignalingMessage, SignalingServer,
-    MAX_PEERS_PER_ROOM,
+    generate_invite_code, is_invite_code_format, PeerInfo, RoomInfo, SignalingClient,
+    SignalingConnection, SignalingMessage, SignalingServer, MAX_PEERS_PER_ROOM,
 };
 pub use stun::{StunClient, StunResult, DEFAULT_STUN_SERVERS};
 pub use transport::UdpTransport;
