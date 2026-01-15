@@ -1,6 +1,6 @@
 ---
 # jamjam service deployment tasks
-# Uses pre-built Docker images from ghcr.io
+# Deploys locally-built Docker images via SSH transfer
 
 - name: Create application directory
   file:
@@ -19,9 +19,37 @@
   template:
     src: env.j2
     dest: "{{ jamjam_app_dir }}/.env"
-    mode: '0644'
+    mode: '0600'
   notify: Restart jamjam services
 
+# Transfer locally-built Docker images
+- name: Check if local image archive exists
+  delegate_to: localhost
+  become: no
+  stat:
+    path: /tmp/jamjam-images.tar.gz
+  register: local_image_archive
+
+- name: Copy Docker images to server
+  copy:
+    src: /tmp/jamjam-images.tar.gz
+    dest: /tmp/jamjam-images.tar.gz
+    mode: '0644'
+  when: local_image_archive.stat.exists
+
+- name: Load Docker images
+  shell: gunzip -c /tmp/jamjam-images.tar.gz | docker load
+  register: load_result
+  changed_when: "'Loaded image' in load_result.stdout"
+  when: local_image_archive.stat.exists
+
+- name: Clean up image archive on server
+  file:
+    path: /tmp/jamjam-images.tar.gz
+    state: absent
+  when: local_image_archive.stat.exists
+
+# Pull cloudflared from public registry
 - name: Pull cloudflared image
   command: docker pull cloudflare/cloudflared:latest
   args:
