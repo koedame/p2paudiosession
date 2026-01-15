@@ -141,7 +141,12 @@
       "name": "高音質モード",
       "description": "高速回線での録音向け"
     },
-    "recommended": "推奨"
+    "recommended": "推奨",
+    "recommendation": {
+      "message": "接続品質（ジッター{{jitter}}ms）に基づき、{{preset}}への切り替えを推奨します",
+      "current": "現在: {{preset}}",
+      "switch": "切替"
+    }
   },
   "quality": {
     "excellent": "非常に良好",

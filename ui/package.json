@@ -7,7 +7,9 @@
     "dev": "vite",
     "dev:catalog": "VITE_CATALOG_MODE=true vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run"
   },
   "dependencies": {
     "i18next": "^25.7.4",

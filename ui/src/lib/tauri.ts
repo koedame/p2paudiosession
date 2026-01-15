@@ -326,6 +326,29 @@ export interface AppConfig {
   buffer_size: number;
   /** Custom signaling server URL (null = use default server) */
   signaling_server_url: string | null;
+  /** Selected audio preset */
+  preset: AudioPresetId;
+}
+
+/**
+ * Audio preset identifier
+ */
+export type AudioPresetId =
+  | "zero-latency"
+  | "ultra-low-latency"
+  | "balanced"
+  | "high-quality";
+
+/**
+ * Preset information
+ */
+export interface PresetInfo {
+  /** Preset identifier (e.g., "zero-latency") */
+  id: AudioPresetId;
+  /** Recommended buffer size in samples */
+  buffer_size: number;
+  /** Recommended jitter buffer frames */
+  jitter_buffer_frames: number;
 }
 
 /**
@@ -358,4 +381,35 @@ export async function configGetServerUrl(): Promise<string | null> {
  */
 export async function configSetServerUrl(url: string | null): Promise<void> {
   return invoke("config_set_server_url", { url });
+}
+
+// ============================================================================
+// Preset API
+// ============================================================================
+
+/**
+ * List all available presets
+ * @returns Array of preset information
+ */
+export async function configListPresets(): Promise<PresetInfo[]> {
+  return invoke("config_list_presets");
+}
+
+/**
+ * Get the current preset
+ * @returns Current preset identifier
+ */
+export async function configGetPreset(): Promise<AudioPresetId> {
+  return invoke("config_get_preset");
+}
+
+/**
+ * Set the preset and apply its recommended settings
+ * @param presetName Preset identifier (e.g., "zero-latency")
+ * @returns Applied preset information
+ */
+export async function configSetPreset(
+  presetName: AudioPresetId
+): Promise<PresetInfo> {
+  return invoke("config_set_preset", { presetName });
 }

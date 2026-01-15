@@ -19,6 +19,74 @@ const APP_NAME: &str = "jamjam";
 /// Default buffer size in samples (64 samples @ 48kHz = 1.33ms)
 const DEFAULT_BUFFER_SIZE: u32 = 64;
 
+/// Available audio presets
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum AudioPreset {
+    /// Zero latency - for fiber connections (0 jitter buffer, 32 samples)
+    ZeroLatency,
+    /// Ultra low latency - for LAN (1 frame jitter buffer, 64 samples)
+    UltraLowLatency,
+    /// Balanced - for typical internet (4 frame jitter buffer, 128 samples)
+    #[default]
+    Balanced,
+    /// High quality - for recording (8 frame jitter buffer, 256 samples)
+    HighQuality,
+}
+
+impl AudioPreset {
+    /// Get the recommended buffer size for this preset
+    pub fn buffer_size(&self) -> u32 {
+        match self {
+            AudioPreset::ZeroLatency => 32,
+            AudioPreset::UltraLowLatency => 64,
+            AudioPreset::Balanced => 128,
+            AudioPreset::HighQuality => 256,
+        }
+    }
+
+    /// Get the recommended jitter buffer frames for this preset
+    pub fn jitter_buffer_frames(&self) -> u32 {
+        match self {
+            AudioPreset::ZeroLatency => 0,
+            AudioPreset::UltraLowLatency => 1,
+            AudioPreset::Balanced => 4,
+            AudioPreset::HighQuality => 8,
+        }
+    }
+
+    /// Get the preset name as a string (for serialization)
+    pub fn name(&self) -> &'static str {
+        match self {
+            AudioPreset::ZeroLatency => "zero-latency",
+            AudioPreset::UltraLowLatency => "ultra-low-latency",
+            AudioPreset::Balanced => "balanced",
+            AudioPreset::HighQuality => "high-quality",
+        }
+    }
+
+    /// Parse a preset from a string name
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "zero-latency" => Some(AudioPreset::ZeroLatency),
+            "ultra-low-latency" => Some(AudioPreset::UltraLowLatency),
+            "balanced" => Some(AudioPreset::Balanced),
+            "high-quality" => Some(AudioPreset::HighQuality),
+            _ => None,
+        }
+    }
+
+    /// Get all available presets
+    pub fn all() -> Vec<Self> {
+        vec![
+            AudioPreset::ZeroLatency,
+            AudioPreset::UltraLowLatency,
+            AudioPreset::Balanced,
+            AudioPreset::HighQuality,
+        ]
+    }
+}
+
 /// Application configuration
 ///
 /// Contains all persistent settings for the jamjam application.
@@ -39,6 +107,10 @@ pub struct AppConfig {
     /// Custom signaling server URL (None = use default server)
     #[serde(default)]
     pub signaling_server_url: Option<String>,
+
+    /// Selected audio preset
+    #[serde(default)]
+    pub preset: AudioPreset,
 }
 
 fn default_buffer_size() -> u32 {
@@ -52,6 +124,7 @@ impl Default for AppConfig {
             output_device_id: None,
             buffer_size: DEFAULT_BUFFER_SIZE,
             signaling_server_url: None,
+            preset: AudioPreset::default(),
         }
     }
 }
@@ -230,6 +303,58 @@ pub fn config_set_server_url(
     let mut config = state.get()?;
     config.signaling_server_url = url;
     state.update(config)
+}
+
+/// Preset information returned to the frontend
+#[derive(Debug, Clone, Serialize)]
+pub struct PresetInfo {
+    /// Preset identifier (e.g., "zero-latency")
+    pub id: String,
+    /// Recommended buffer size in samples
+    pub buffer_size: u32,
+    /// Recommended jitter buffer frames
+    pub jitter_buffer_frames: u32,
+}
+
+/// Get the current preset
+#[tauri::command]
+pub fn config_get_preset(state: tauri::State<'_, ConfigState>) -> Result<String, String> {
+    let config = state.get()?;
+    Ok(config.preset.name().to_string())
+}
+
+/// Set the preset and apply its recommended settings
+#[tauri::command]
+pub fn config_set_preset(
+    preset_name: String,
+    state: tauri::State<'_, ConfigState>,
+) -> Result<PresetInfo, String> {
+    let preset = AudioPreset::from_name(&preset_name)
+        .ok_or_else(|| format!("Unknown preset: {}", preset_name))?;
+
+    let mut config = state.get()?;
+    config.preset = preset.clone();
+    config.buffer_size = preset.buffer_size();
+    state.update(config)?;
+
+    Ok(PresetInfo {
+        id: preset.name().to_string(),
+        buffer_size: preset.buffer_size(),
+        jitter_buffer_frames: preset.jitter_buffer_frames(),
+    })
+}
+
+/// List all available presets
+#[tauri::command]
+pub fn config_list_presets() -> Vec<PresetInfo> {
+    AudioPreset::all()
+        .into_iter()
+        .map(|p| PresetInfo {
+            id: p.name().to_string(),
+            buffer_size: p.buffer_size(),
+            jitter_buffer_frames: p.jitter_buffer_frames(),
+        })
+        .collect()
 }
 
 #[cfg(test)]

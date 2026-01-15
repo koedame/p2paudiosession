@@ -142,7 +142,12 @@
       "name": "High Quality Mode",
       "description": "For high-speed recording"
     },
-    "recommended": "Recommended"
+    "recommended": "Recommended",
+    "recommendation": {
+      "message": "Based on your connection ({{jitter}}ms jitter), we recommend switching to {{preset}}",
+      "current": "Current: {{preset}}",
+      "switch": "Switch"
+    }
   },
   "quality": {
     "excellent": "Excellent",

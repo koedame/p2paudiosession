@@ -197,12 +197,24 @@
 .main-error {
   width: 100%;
   max-width: 400px;
-  padding: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
   background-color: var(--color-bg-error);
   border: 1px solid var(--color-status-error);
   border-radius: var(--radius-md);
-  color: var(--color-status-error);
   text-align: center;
+}
+
+.main-error__title {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-status-error);
+  margin-bottom: var(--space-xs);
+}
+
+.main-error__message {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  line-height: 1.4;
 }
 
 /* Server form */

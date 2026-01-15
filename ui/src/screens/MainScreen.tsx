@@ -8,6 +8,8 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { ConnectionIndicator } from "../components/ConnectionIndicator";
 import { SessionStats } from "../components/SessionStats";
+import { PresetRecommendation } from "../components/PresetRecommendation";
+import { formatErrorForDisplay } from "../lib/errorMessages";
 import {
   signalingConnect,
   signalingDisconnect,
@@ -20,12 +22,15 @@ import {
   streamingStatus,
   audioGetCurrentDevices,
   audioGetBufferSize,
+  audioSetBufferSize,
   configLoad,
   configSetServerUrl,
+  configSetPreset,
   type RoomInfo,
   type PeerInfo,
   type NetworkStats,
   type DetailedLatency,
+  type AudioPresetId,
 } from "../lib/tauri";
 import "./MainScreen.css";
 
@@ -54,6 +59,7 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
   const [currentInviteCode, setCurrentInviteCode] = useState("");
   const [networkStats, setNetworkStats] = useState<NetworkStats | null>(null);
   const [detailedLatency, setDetailedLatency] = useState<DetailedLatency | null>(null);
+  const [currentPreset, setCurrentPreset] = useState<AudioPresetId>("balanced");
 
   // Update html lang attribute when language changes
   useEffect(() => {
@@ -67,6 +73,9 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
         const config = await configLoad();
         if (config.signaling_server_url) {
           setServerUrl(config.signaling_server_url);
+        }
+        if (config.preset) {
+          setCurrentPreset(config.preset);
         }
       } catch (e) {
         // Config file might not exist yet, use defaults
@@ -276,6 +285,19 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
   // Handle settings click
   const handleSettingsClick = () => {
     onSettingsClick?.();
+  };
+
+  // Handle preset switch from recommendation
+  const handlePresetSwitch = async (presetId: AudioPresetId) => {
+    try {
+      const appliedPreset = await configSetPreset(presetId);
+      setCurrentPreset(presetId);
+      // Also update the audio system's buffer size
+      await audioSetBufferSize(appliedPreset.buffer_size);
+      console.log("Switched to preset:", presetId, "buffer size:", appliedPreset.buffer_size);
+    } catch (e) {
+      console.error("Failed to switch preset:", e);
+    }
   };
 
   // Render idle (disconnected from server) state
@@ -535,6 +557,13 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
           </button>
         </div>
 
+        {/* Preset Recommendation based on jitter */}
+        <PresetRecommendation
+          jitterMs={networkStats?.jitter_ms ?? null}
+          currentPreset={currentPreset}
+          onSwitchPreset={handlePresetSwitch}
+        />
+
         {/* Detailed Session Statistics */}
         <SessionStats network={networkStats} latency={detailedLatency} />
       </>
@@ -545,13 +574,18 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
   const renderErrorState = () => {
     if (sessionState.status !== "error") return null;
 
+    const formattedError = formatErrorForDisplay(sessionState.message, t);
+
     return (
       <>
         <div className="main-status">
           <ConnectionIndicator status="error" size="lg" />
         </div>
 
-        <div className="main-error">{sessionState.message}</div>
+        <div className="main-error">
+          <div className="main-error__title">{formattedError.title}</div>
+          <div className="main-error__message">{formattedError.message}</div>
+        </div>
 
         <button
           className="main-card__join-btn"
