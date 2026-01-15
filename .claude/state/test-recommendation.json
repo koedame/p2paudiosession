@@ -1,7 +1,0 @@
-{
-  "timestamp": "2026-01-15T04:11:38Z",
-  "changed_file": "src-tauri/src/signaling.rs",
-  "test_command": "cargo test",
-  "related_test": "",
-  "recommendation": "テストの実行を推奨します"
-}
