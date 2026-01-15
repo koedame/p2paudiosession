@@ -26,8 +26,13 @@ Desktop.ini
 .env.*
 !.env.example
 
-# Claude Code local settings
+# Claude Code local/session-specific files
 .claude/settings.local.json
+.claude/logs/
+.claude/state/
+.claude/memory/session-log.md
+**/.claude/logs/
+**/.claude/state/
 
 # Log files
 *.log
