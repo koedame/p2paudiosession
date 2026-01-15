@@ -103,3 +103,8 @@ sudo apt-get install -y libasound2-dev libssl-dev libwebkit2gtk-4.1-dev libappin
 ## 次のステップ
 
 インストールが完了したら、[クイックスタート](/docs/getting-started/quick-start)に進んでください。
+
+:::info プライバシーについて
+jamjamはP2P通信を使用するため、セッション参加者間でIPアドレスが共有されます。
+詳細は[プライバシーとセキュリティ](/docs/getting-started/privacy)をご確認ください。
+:::
