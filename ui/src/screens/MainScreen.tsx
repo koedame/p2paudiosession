@@ -4,11 +4,14 @@
  * Entry point for session creation and joining.
  * Displays connection status and provides room management UI.
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { ConnectionIndicator } from "../components/ConnectionIndicator";
 import { SessionStats } from "../components/SessionStats";
 import { PresetRecommendation } from "../components/PresetRecommendation";
+import { MuteButton } from "../components/MuteButton";
+import { InputLevelMeter } from "../components/InputLevelMeter";
+import { ConnectionHistory } from "../components/ConnectionHistory";
 import { formatErrorForDisplay } from "../lib/errorMessages";
 import {
   signalingConnect,
@@ -20,17 +23,22 @@ import {
   streamingStart,
   streamingStop,
   streamingStatus,
+  streamingSetMute,
   audioGetCurrentDevices,
   audioGetBufferSize,
   audioSetBufferSize,
   configLoad,
   configSetServerUrl,
   configSetPreset,
+  configGetConnectionHistory,
+  configAddConnectionHistory,
+  configRemoveConnectionHistory,
   type RoomInfo,
   type PeerInfo,
   type NetworkStats,
   type DetailedLatency,
   type AudioPresetId,
+  type ConnectionHistoryEntry,
 } from "../lib/tauri";
 import "./MainScreen.css";
 
@@ -60,6 +68,9 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
   const [networkStats, setNetworkStats] = useState<NetworkStats | null>(null);
   const [detailedLatency, setDetailedLatency] = useState<DetailedLatency | null>(null);
   const [currentPreset, setCurrentPreset] = useState<AudioPresetId>("balanced");
+  const [isMuted, setIsMuted] = useState(false);
+  const [inputLevel, setInputLevel] = useState(0);
+  const [connectionHistory, setConnectionHistory] = useState<ConnectionHistoryEntry[]>([]);
 
   // Update html lang attribute when language changes
   useEffect(() => {
@@ -81,6 +92,14 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
         // Config file might not exist yet, use defaults
         console.log("No saved config found, using defaults");
       }
+
+      // Load connection history
+      try {
+        const history = await configGetConnectionHistory();
+        setConnectionHistory(history);
+      } catch (e) {
+        console.log("Failed to load connection history:", e);
+      }
     };
     loadConfig();
   }, []);
@@ -94,11 +113,12 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
     };
   }, [connectionId]);
 
-  // Poll streaming status for latency when connected
+  // Poll streaming status for latency and audio level when connected
   useEffect(() => {
     if (sessionState.status !== "connected") {
       setNetworkStats(null);
       setDetailedLatency(null);
+      setInputLevel(0);
       return;
     }
 
@@ -108,6 +128,8 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
         if (status.is_active) {
           setNetworkStats(status.network);
           setDetailedLatency(status.latency);
+          setIsMuted(status.is_muted);
+          setInputLevel(status.input_level);
         }
       } catch (e) {
         console.error("Failed to get streaming status:", e);
@@ -117,8 +139,8 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
     // Initial poll
     pollStats();
 
-    // Poll every 500ms
-    const interval = setInterval(pollStats, 500);
+    // Poll every 100ms for smoother audio level updates
+    const interval = setInterval(pollStats, 100);
 
     return () => clearInterval(interval);
   }, [sessionState.status]);
@@ -223,6 +245,17 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
         participants: result.peers.map((p) => p.name),
       });
 
+      // Save to connection history
+      const historyCode = result.invite_code || roomId.slice(0, 6).toUpperCase();
+      try {
+        await configAddConnectionHistory(historyCode);
+        // Reload history to show updated list
+        const history = await configGetConnectionHistory();
+        setConnectionHistory(history);
+      } catch (historyErr) {
+        console.error("Failed to save to history:", historyErr);
+      }
+
       // Start streaming if there's a peer with an address (e.g., echobot)
       const peerWithAddr = result.peers.find(
         (p: PeerInfo) => p.public_addr || p.local_addr
@@ -299,6 +332,32 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
       console.error("Failed to switch preset:", e);
     }
   };
+
+  // Handle mute toggle
+  const handleToggleMute = useCallback(async () => {
+    try {
+      const newMuteState = !isMuted;
+      await streamingSetMute(newMuteState);
+      setIsMuted(newMuteState);
+    } catch (e) {
+      console.error("Failed to toggle mute:", e);
+    }
+  }, [isMuted]);
+
+  // Handle selecting from connection history
+  const handleHistorySelect = useCallback((roomCode: string) => {
+    setInviteCode(roomCode);
+  }, []);
+
+  // Handle removing from connection history
+  const handleHistoryRemove = useCallback(async (roomCode: string) => {
+    try {
+      await configRemoveConnectionHistory(roomCode);
+      setConnectionHistory((prev) => prev.filter((e) => e.room_code !== roomCode));
+    } catch (e) {
+      console.error("Failed to remove from history:", e);
+    }
+  }, []);
 
   // Render idle (disconnected from server) state
   const renderIdleState = () => (
@@ -428,6 +487,13 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
                 {t("session.join.button")}
               </button>
             </div>
+
+            {/* Connection history */}
+            <ConnectionHistory
+              history={connectionHistory}
+              onSelect={handleHistorySelect}
+              onRemove={handleHistoryRemove}
+            />
           </div>
 
           <div className="main-card__divider">{t("common.label.or")}</div>
@@ -546,6 +612,20 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
                 </li>
               ))}
             </ul>
+          </div>
+
+          {/* Audio controls: mute button and input level meter */}
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-md)",
+            marginBottom: "var(--space-lg)",
+            padding: "var(--space-md)",
+            backgroundColor: "var(--color-bg-tertiary)",
+            borderRadius: "var(--radius-md)"
+          }}>
+            <MuteButton isMuted={isMuted} onToggle={handleToggleMute} />
+            <InputLevelMeter level={inputLevel} isMuted={isMuted} variant="default" />
           </div>
 
           <button

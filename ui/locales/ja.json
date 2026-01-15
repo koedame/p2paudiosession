@@ -91,6 +91,13 @@
       "volume": "マスター音量"
     }
   },
+  "mute": {
+    "mute": "ミュート",
+    "unmute": "ミュート解除"
+  },
+  "audioLevel": {
+    "label": "入力レベル"
+  },
   "settings": {
     "title": "設定",
     "audio": {
@@ -260,5 +267,12 @@
     "connected": "接続しました",
     "disconnected": "切断しました",
     "bandwidthRecovered": "帯域が回復しました"
+  },
+  "connectionHistory": {
+    "title": "最近の接続",
+    "remove": "削除",
+    "empty": "接続履歴がありません",
+    "yesterday": "昨日",
+    "daysAgo": "{{days}}日前"
   }
 }

@@ -4,7 +4,7 @@
 //! the non-Send+Sync AudioEngine.
 
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc as std_mpsc;
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -25,6 +25,10 @@ pub struct StreamingState {
     cmd_tx: Mutex<Option<std_mpsc::Sender<StreamingCommand>>>,
     /// Flag indicating if streaming is active
     is_active: Arc<AtomicBool>,
+    /// Flag indicating if microphone is muted
+    is_muted: Arc<AtomicBool>,
+    /// Current input audio level (0-100, RMS normalized)
+    input_level: Arc<AtomicU32>,
     /// Remote address currently connected to
     remote_addr: Mutex<Option<String>>,
     /// Connection statistics (updated by audio thread)
@@ -38,6 +42,8 @@ impl StreamingState {
         Self {
             cmd_tx: Mutex::new(None),
             is_active: Arc::new(AtomicBool::new(false)),
+            is_muted: Arc::new(AtomicBool::new(false)),
+            input_level: Arc::new(AtomicU32::new(0)),
             remote_addr: Mutex::new(None),
             stats: Arc::new(RwLock::new(None)),
             buffer_size: Mutex::new(64), // Default: 64 samples
@@ -62,6 +68,7 @@ enum StreamingCommand {
     Stop,
     SetInputDevice(Option<String>),
     SetOutputDevice(Option<String>),
+    SetMute(bool),
 }
 
 /// Network statistics for IPC
@@ -116,6 +123,10 @@ pub struct DetailedLatency {
 pub struct StreamingStatus {
     pub is_active: bool,
     pub remote_addr: Option<String>,
+    /// Whether microphone is muted
+    pub is_muted: bool,
+    /// Current input audio level (0-100)
+    pub input_level: u32,
     /// Network statistics
     pub network: Option<NetworkStats>,
     /// Detailed latency breakdown
@@ -163,7 +174,13 @@ pub async fn streaming_start(
     }
 
     let is_active = state.is_active.clone();
+    let is_muted = state.is_muted.clone();
+    let input_level = state.input_level.clone();
     let shared_stats = state.stats.clone();
+
+    // Reset mute state on new connection
+    state.is_muted.store(false, Ordering::SeqCst);
+    state.input_level.store(0, Ordering::SeqCst);
 
     // Mark as active BEFORE spawning thread to avoid race condition
     state.is_active.store(true, Ordering::SeqCst);
@@ -184,6 +201,8 @@ pub async fn streaming_start(
                 buffer_size,
                 cmd_rx,
                 &is_active,
+                &is_muted,
+                &input_level,
                 &shared_stats,
             )
             .await
@@ -245,6 +264,8 @@ pub async fn streaming_status(
     state: tauri::State<'_, StreamingState>,
 ) -> Result<StreamingStatus, String> {
     let is_active = state.is_active.load(Ordering::SeqCst);
+    let is_muted = state.is_muted.load(Ordering::SeqCst);
+    let input_level = state.input_level.load(Ordering::SeqCst);
     let remote_addr = state.remote_addr.lock().await.clone();
     let stats = state.stats.read().ok().and_then(|s| s.clone());
 
@@ -324,6 +345,8 @@ pub async fn streaming_status(
     Ok(StreamingStatus {
         is_active,
         remote_addr,
+        is_muted,
+        input_level,
         network,
         latency,
     })
@@ -369,6 +392,42 @@ pub async fn streaming_set_output_device(
     Ok(())
 }
 
+/// Set mute state
+#[tauri::command]
+pub async fn streaming_set_mute(
+    muted: bool,
+    state: tauri::State<'_, StreamingState>,
+) -> Result<(), String> {
+    // Can set mute state even when not streaming
+    state.is_muted.store(muted, Ordering::SeqCst);
+
+    // If streaming, also send command to audio thread
+    if state.is_active.load(Ordering::SeqCst) {
+        let tx = state.cmd_tx.lock().await;
+        if let Some(ref sender) = *tx {
+            let _ = sender.send(StreamingCommand::SetMute(muted));
+        }
+    }
+
+    Ok(())
+}
+
+/// Get mute state
+#[tauri::command]
+pub async fn streaming_get_mute(
+    state: tauri::State<'_, StreamingState>,
+) -> Result<bool, String> {
+    Ok(state.is_muted.load(Ordering::SeqCst))
+}
+
+/// Get current input audio level (0-100)
+#[tauri::command]
+pub async fn streaming_get_input_level(
+    state: tauri::State<'_, StreamingState>,
+) -> Result<u32, String> {
+    Ok(state.input_level.load(Ordering::SeqCst))
+}
+
 /// Run audio streaming in the audio thread
 async fn run_audio_streaming(
     remote_addr: SocketAddr,
@@ -377,6 +436,8 @@ async fn run_audio_streaming(
     buffer_size: u32,
     cmd_rx: std_mpsc::Receiver<StreamingCommand>,
     is_active: &AtomicBool,
+    is_muted: &AtomicBool,
+    input_level: &AtomicU32,
     shared_stats: &RwLock<Option<ConnectionStats>>,
 ) -> Result<(), String> {
     // Audio configuration - buffer_size controls latency vs stability tradeoff
@@ -407,9 +468,22 @@ async fn run_audio_streaming(
     // Keep a clone for device switching
     let tx_capture_for_switch = tx_capture.clone();
 
-    // Start audio capture
+    // Clone atomics for capture callback
+    let input_level_for_capture = Arc::new(AtomicU32::new(0));
+    let input_level_capture_ref = input_level_for_capture.clone();
+
+    // Start audio capture with level metering
     audio_engine
         .start_capture(input_id.as_ref(), move |samples, timestamp| {
+            // Calculate RMS level (0-100)
+            if !samples.is_empty() {
+                let sum_squares: f32 = samples.iter().map(|s| s * s).sum();
+                let rms = (sum_squares / samples.len() as f32).sqrt();
+                // Convert to 0-100 scale (assuming max amplitude of 1.0)
+                // Use a slight compression curve for better visual feedback
+                let level = ((rms * 100.0).min(100.0)).round() as u32;
+                input_level_capture_ref.store(level, Ordering::SeqCst);
+            }
             let _ = tx_capture.try_send((samples.to_vec(), timestamp as u32));
         })
         .map_err(|e| format!("Failed to start capture: {}", e))?;
@@ -442,9 +516,17 @@ async fn run_audio_streaming(
     let connection_arc = Arc::new(tokio::sync::Mutex::new(connection));
     let connection_for_send = connection_arc.clone();
 
+    // Create muted state flag for send task
+    let is_muted_for_send = Arc::new(AtomicBool::new(is_muted.load(Ordering::SeqCst)));
+    let is_muted_send_ref = is_muted_for_send.clone();
+
     // Spawn task to send captured audio
     let send_task = tokio::spawn(async move {
         while let Some((samples, timestamp)) = rx_capture.recv().await {
+            // Skip sending if muted
+            if is_muted_send_ref.load(Ordering::SeqCst) {
+                continue;
+            }
             let conn = connection_for_send.lock().await;
             if conn.is_connected() {
                 if let Err(e) = conn.send_audio(&samples, timestamp).await {
@@ -483,6 +565,10 @@ async fn run_audio_streaming(
                     eprintln!("Failed to switch output device: {}", e);
                 }
             }
+            Ok(StreamingCommand::SetMute(muted)) => {
+                println!("Setting mute state to: {}", muted);
+                is_muted_for_send.store(muted, Ordering::SeqCst);
+            }
             Err(std_mpsc::TryRecvError::Disconnected) => {
                 println!("Command channel disconnected");
                 break;
@@ -497,16 +583,19 @@ async fn run_audio_streaming(
             break;
         }
 
-        // Update stats every ~100ms (10 iterations * 10ms)
+        // Update stats and input level every ~100ms (10 iterations * 10ms)
         stats_update_counter += 1;
         if stats_update_counter >= 10 {
             stats_update_counter = 0;
+            // Update connection stats
             if let Ok(conn) = connection_arc.try_lock() {
                 let conn_stats = conn.stats();
                 if let Ok(mut stats) = shared_stats.write() {
                     *stats = Some(conn_stats);
                 }
             }
+            // Update shared input level from capture callback
+            input_level.store(input_level_for_capture.load(Ordering::SeqCst), Ordering::SeqCst);
         }
 
         // Process received audio with timeout

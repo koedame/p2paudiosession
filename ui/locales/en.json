@@ -92,6 +92,13 @@
       "volume": "Master Volume"
     }
   },
+  "mute": {
+    "mute": "Mute",
+    "unmute": "Unmute"
+  },
+  "audioLevel": {
+    "label": "Input Level"
+  },
   "settings": {
     "title": "Settings",
     "audio": {
@@ -261,5 +268,12 @@
     "connected": "Connected",
     "disconnected": "Disconnected",
     "bandwidthRecovered": "Bandwidth recovered"
+  },
+  "connectionHistory": {
+    "title": "Recent Connections",
+    "remove": "Remove",
+    "empty": "No connection history",
+    "yesterday": "Yesterday",
+    "daysAgo": "{{days}} days ago"
   }
 }

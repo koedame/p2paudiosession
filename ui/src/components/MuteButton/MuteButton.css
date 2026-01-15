@@ -1,0 +1,68 @@
+/* MuteButton styles */
+
+.mute-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: none;
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.mute-button:hover:not(:disabled) {
+  background-color: var(--color-bg-hover);
+}
+
+.mute-button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.mute-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Muted state */
+.mute-button--muted {
+  background-color: var(--color-status-error);
+  color: var(--color-text-inverse);
+}
+
+.mute-button--muted:hover:not(:disabled) {
+  background-color: #c62828;
+}
+
+/* Icon */
+.mute-button__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mute-button__icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Label */
+.mute-button__label {
+  white-space: nowrap;
+}
+
+/* Compact variant for main screen */
+.mute-button--compact {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-caption);
+}
+
+.mute-button--compact .mute-button__icon svg {
+  width: 16px;
+  height: 16px;
+}

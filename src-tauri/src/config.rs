@@ -10,6 +10,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
+use chrono::{DateTime, Utc};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
@@ -18,6 +19,25 @@ const APP_NAME: &str = "jamjam";
 
 /// Default buffer size in samples (64 samples @ 48kHz = 1.33ms)
 const DEFAULT_BUFFER_SIZE: u32 = 64;
+
+/// Maximum number of connection history entries to keep
+const MAX_HISTORY_ENTRIES: usize = 10;
+
+/// Connection history entry
+///
+/// Records a past connection for quick reconnection.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ConnectionHistoryEntry {
+    /// Room code used for the connection
+    pub room_code: String,
+
+    /// Timestamp of the connection (ISO 8601 format)
+    pub connected_at: DateTime<Utc>,
+
+    /// Optional user-defined label for this connection
+    #[serde(default)]
+    pub label: Option<String>,
+}
 
 /// Available audio presets
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -111,6 +131,10 @@ pub struct AppConfig {
     /// Selected audio preset
     #[serde(default)]
     pub preset: AudioPreset,
+
+    /// Connection history (most recent first)
+    #[serde(default)]
+    pub connection_history: Vec<ConnectionHistoryEntry>,
 }
 
 fn default_buffer_size() -> u32 {
@@ -125,6 +149,7 @@ impl Default for AppConfig {
             buffer_size: DEFAULT_BUFFER_SIZE,
             signaling_server_url: None,
             preset: AudioPreset::default(),
+            connection_history: Vec::new(),
         }
     }
 }
@@ -357,6 +382,97 @@ pub fn config_list_presets() -> Vec<PresetInfo> {
         .collect()
 }
 
+// =============================================================================
+// Connection History Commands
+// =============================================================================
+
+/// Get connection history
+///
+/// Returns the list of past connections, most recent first.
+#[tauri::command]
+pub fn config_get_connection_history(
+    state: tauri::State<'_, ConfigState>,
+) -> Result<Vec<ConnectionHistoryEntry>, String> {
+    let config = state.get()?;
+    Ok(config.connection_history)
+}
+
+/// Add a connection to history
+///
+/// Adds a new entry to the connection history. If the room code already exists,
+/// it updates the timestamp and moves it to the top. Limits history to MAX_HISTORY_ENTRIES.
+#[tauri::command]
+pub fn config_add_connection_history(
+    room_code: String,
+    label: Option<String>,
+    state: tauri::State<'_, ConfigState>,
+) -> Result<(), String> {
+    let mut config = state.get()?;
+
+    // Remove existing entry with same room code (if any)
+    config
+        .connection_history
+        .retain(|e| e.room_code != room_code);
+
+    // Add new entry at the beginning
+    config.connection_history.insert(
+        0,
+        ConnectionHistoryEntry {
+            room_code,
+            connected_at: Utc::now(),
+            label,
+        },
+    );
+
+    // Trim to max entries
+    config.connection_history.truncate(MAX_HISTORY_ENTRIES);
+
+    state.update(config)
+}
+
+/// Remove a connection from history
+///
+/// Removes the entry with the specified room code from history.
+#[tauri::command]
+pub fn config_remove_connection_history(
+    room_code: String,
+    state: tauri::State<'_, ConfigState>,
+) -> Result<(), String> {
+    let mut config = state.get()?;
+    config
+        .connection_history
+        .retain(|e| e.room_code != room_code);
+    state.update(config)
+}
+
+/// Clear all connection history
+#[tauri::command]
+pub fn config_clear_connection_history(state: tauri::State<'_, ConfigState>) -> Result<(), String> {
+    let mut config = state.get()?;
+    config.connection_history.clear();
+    state.update(config)
+}
+
+/// Update a connection history entry label
+#[tauri::command]
+pub fn config_update_connection_history_label(
+    room_code: String,
+    label: Option<String>,
+    state: tauri::State<'_, ConfigState>,
+) -> Result<(), String> {
+    let mut config = state.get()?;
+    if let Some(entry) = config
+        .connection_history
+        .iter_mut()
+        .find(|e| e.room_code == room_code)
+    {
+        entry.label = label;
+        state.update(config)
+    } else {
+        Err(format!("Room code not found in history: {}", room_code))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -377,6 +493,7 @@ mod tests {
             output_device_id: Some("device2".to_string()),
             buffer_size: 64,
             signaling_server_url: Some("wss://example.com".to_string()),
+            ..Default::default()
         };
         assert!(config.validate().is_ok());
     }
@@ -406,6 +523,7 @@ mod tests {
             output_device_id: Some("output-device".to_string()),
             buffer_size: 128,
             signaling_server_url: Some("wss://server.example.com".to_string()),
+            ..Default::default()
         };
 
         let toml_str = toml::to_string(&config).unwrap();

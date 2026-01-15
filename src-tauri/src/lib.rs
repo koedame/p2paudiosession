@@ -45,6 +45,9 @@ pub fn run() {
             streaming::streaming_status,
             streaming::streaming_set_input_device,
             streaming::streaming_set_output_device,
+            streaming::streaming_set_mute,
+            streaming::streaming_get_mute,
+            streaming::streaming_get_input_level,
             config::config_load,
             config::config_save,
             config::config_get_server_url,
@@ -52,6 +55,11 @@ pub fn run() {
             config::config_list_presets,
             config::config_get_preset,
             config::config_set_preset,
+            config::config_get_connection_history,
+            config::config_add_connection_history,
+            config::config_remove_connection_history,
+            config::config_clear_connection_history,
+            config::config_update_connection_history_label,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

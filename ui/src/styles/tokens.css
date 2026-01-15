@@ -13,8 +13,11 @@
   /* === Background === */
   --color-bg-primary: #1E1E2E;
   --color-bg-secondary: #2A2A3E;
+  --color-bg-tertiary: #363652;
   --color-bg-elevated: #363652;
+  --color-bg-hover: #404060;
   --color-bg-overlay: rgba(0, 0, 0, 0.5);
+  --color-bg-error: rgba(248, 113, 113, 0.1);
 
   /* === Accent === */
   --color-accent: #7C5CFF;
@@ -32,11 +35,15 @@
   /* === Text === */
   --color-text-primary: #FFFFFF;
   --color-text-secondary: #A0A0B0;
+  --color-text-tertiary: #808090;
+  --color-text-muted: #606070;
   --color-text-disabled: #606070;
   --color-text-inverse: #1E1E2E;
 
   /* === Border === */
   --color-border: #404060;
+  --color-border-default: #404060;
+  --color-border-subtle: #303050;
   --color-border-focus: #7C5CFF;
   --color-border-hover: #505070;
 
@@ -46,6 +53,8 @@
   --color-status-connected: #4ADE80;
   --color-status-unstable: #FBBF24;
   --color-status-error: #F87171;
+  --color-status-success: #4ADE80;
+  --color-status-warning: #FBBF24;
 
   /* === Mixer === */
   --color-meter-low: #4ADE80;
@@ -62,8 +71,11 @@
   /* === Background === */
   --color-bg-primary: #FAFAFA;
   --color-bg-secondary: #FFFFFF;
+  --color-bg-tertiary: #F0F0F5;
   --color-bg-elevated: #F0F0F5;
+  --color-bg-hover: #E8E8F0;
   --color-bg-overlay: rgba(0, 0, 0, 0.3);
+  --color-bg-error: rgba(239, 68, 68, 0.1);
 
   /* === Accent === */
   --color-accent: #6B4FE0;
@@ -81,11 +93,15 @@
   /* === Text === */
   --color-text-primary: #1E1E2E;
   --color-text-secondary: #606070;
+  --color-text-tertiary: #808090;
+  --color-text-muted: #A0A0B0;
   --color-text-disabled: #A0A0B0;
   --color-text-inverse: #FFFFFF;
 
   /* === Border === */
   --color-border: #E0E0E8;
+  --color-border-default: #E0E0E8;
+  --color-border-subtle: #F0F0F5;
   --color-border-focus: #6B4FE0;
   --color-border-hover: #D0D0D8;
 
@@ -95,6 +111,8 @@
   --color-status-connected: #22C55E;
   --color-status-unstable: #EAB308;
   --color-status-error: #EF4444;
+  --color-status-success: #22C55E;
+  --color-status-warning: #EAB308;
 
   /* === Mixer === */
   --color-meter-low: #22C55E;
@@ -102,6 +120,54 @@
   --color-meter-high: #EF4444;
   --color-mute-active: #EF4444;
   --color-solo-active: #EAB308;
+}
+
+/* ===================================================================
+   SYSTEM PREFERENCE DETECTION
+   =================================================================== */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    /* Light theme variables applied when no explicit theme is set */
+    --color-bg-primary: #FAFAFA;
+    --color-bg-secondary: #FFFFFF;
+    --color-bg-tertiary: #F0F0F5;
+    --color-bg-elevated: #F0F0F5;
+    --color-bg-hover: #E8E8F0;
+    --color-bg-overlay: rgba(0, 0, 0, 0.3);
+    --color-bg-error: rgba(239, 68, 68, 0.1);
+    --color-accent: #6B4FE0;
+    --color-accent-hover: #5A3FD0;
+    --color-accent-active: #4A2FC0;
+    --color-success: #22C55E;
+    --color-success-bg: rgba(34, 197, 94, 0.1);
+    --color-warning: #EAB308;
+    --color-warning-bg: rgba(234, 179, 8, 0.1);
+    --color-danger: #EF4444;
+    --color-danger-bg: rgba(239, 68, 68, 0.1);
+    --color-text-primary: #1E1E2E;
+    --color-text-secondary: #606070;
+    --color-text-tertiary: #808090;
+    --color-text-muted: #A0A0B0;
+    --color-text-disabled: #A0A0B0;
+    --color-text-inverse: #FFFFFF;
+    --color-border: #E0E0E8;
+    --color-border-default: #E0E0E8;
+    --color-border-subtle: #F0F0F5;
+    --color-border-focus: #6B4FE0;
+    --color-border-hover: #D0D0D8;
+    --color-status-disconnected: #A0A0B0;
+    --color-status-connecting: #EAB308;
+    --color-status-connected: #22C55E;
+    --color-status-unstable: #EAB308;
+    --color-status-error: #EF4444;
+    --color-status-success: #22C55E;
+    --color-status-warning: #EAB308;
+    --color-meter-low: #22C55E;
+    --color-meter-mid: #EAB308;
+    --color-meter-high: #EF4444;
+    --color-mute-active: #EF4444;
+    --color-solo-active: #EAB308;
+  }
 }
 
 /* ===================================================================
@@ -137,6 +203,7 @@
   /* === Font Weight === */
   --font-weight-bold: 700;
   --font-weight-semibold: 600;
+  --font-weight-medium: 500;
   --font-weight-normal: 400;
 
   /* === Line Height === */
@@ -217,6 +284,7 @@
 
   /* === Easing === */
   --ease-default: ease-out;
+  --ease-out: ease-out;
   --ease-in: ease-in;
   --ease-in-out: ease-in-out;
   --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);

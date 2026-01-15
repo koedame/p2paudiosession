@@ -1,0 +1,90 @@
+/* InputLevelMeter styles */
+
+.input-level-meter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.input-level-meter__label {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  min-width: 60px;
+}
+
+.input-level-meter__bar {
+  position: relative;
+  flex: 1;
+  height: 8px;
+  background-color: var(--color-bg-tertiary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.input-level-meter__fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  transition: width 50ms ease-out, background-color var(--duration-fast) var(--ease-out);
+}
+
+/* Level colors */
+.input-level-meter__fill--low {
+  background-color: var(--color-status-success);
+}
+
+.input-level-meter__fill--medium {
+  background-color: var(--color-status-warning);
+}
+
+.input-level-meter__fill--high {
+  background-color: var(--color-status-error);
+}
+
+.input-level-meter__fill--muted {
+  background-color: var(--color-text-muted);
+}
+
+/* Tick marks */
+.input-level-meter__ticks {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.input-level-meter__tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background-color: var(--color-bg-primary);
+  opacity: 0.5;
+}
+
+.input-level-meter__value {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  min-width: 36px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Mini variant */
+.input-level-meter--mini {
+  gap: var(--space-xs);
+}
+
+.input-level-meter--mini .input-level-meter__bar {
+  height: 4px;
+  min-width: 40px;
+  max-width: 60px;
+}
+
+.input-level-meter--mini .input-level-meter__ticks {
+  display: none;
+}

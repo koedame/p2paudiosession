@@ -3,6 +3,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   AudioDeviceInfo,
   audioListInputDevices,
@@ -24,6 +25,7 @@ import {
   type AudioPresetId,
 } from "../lib/tauri";
 import { DeviceSelector } from "../components/DeviceSelector";
+import { useTheme } from "../hooks/useTheme";
 import "./SettingsScreen.css";
 
 export interface SettingsScreenProps {
@@ -58,6 +60,8 @@ const PRESET_DISPLAY: Record<
 };
 
 export function SettingsScreen({ onBack }: SettingsScreenProps) {
+  const { t } = useTranslation();
+  const { theme, setTheme } = useTheme();
   const [inputDevices, setInputDevices] = useState<AudioDeviceInfo[]>([]);
   const [outputDevices, setOutputDevices] = useState<AudioDeviceInfo[]>([]);
   const [selectedInputId, setSelectedInputId] = useState<string | null>(null);
@@ -342,6 +346,58 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
                 {bufferSize} samples ({calculateLatencyMs(bufferSize)} ms)
               </span>
             </div>
+          </div>
+        </div>
+
+        {/* Theme Selection */}
+        <div className="settings-card">
+          <h2 className="settings-card__title">{t("settings.display.title")}</h2>
+          <p className="settings-card__hint">{t("settings.display.theme")}</p>
+
+          <div className="theme-selector">
+            <button
+              className={`theme-option ${theme === "dark" ? "theme-option--selected" : ""}`}
+              onClick={() => setTheme("dark")}
+            >
+              <span className="theme-option__icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                </svg>
+              </span>
+              <span className="theme-option__label">{t("settings.display.themeDark")}</span>
+            </button>
+            <button
+              className={`theme-option ${theme === "light" ? "theme-option--selected" : ""}`}
+              onClick={() => setTheme("light")}
+            >
+              <span className="theme-option__icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="5" />
+                  <line x1="12" y1="1" x2="12" y2="3" />
+                  <line x1="12" y1="21" x2="12" y2="23" />
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                  <line x1="1" y1="12" x2="3" y2="12" />
+                  <line x1="21" y1="12" x2="23" y2="12" />
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                </svg>
+              </span>
+              <span className="theme-option__label">{t("settings.display.themeLight")}</span>
+            </button>
+            <button
+              className={`theme-option ${theme === "system" ? "theme-option--selected" : ""}`}
+              onClick={() => setTheme("system")}
+            >
+              <span className="theme-option__icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                  <line x1="8" y1="21" x2="16" y2="21" />
+                  <line x1="12" y1="17" x2="12" y2="21" />
+                </svg>
+              </span>
+              <span className="theme-option__label">{t("settings.display.themeSystem")}</span>
+            </button>
           </div>
         </div>
       </main>

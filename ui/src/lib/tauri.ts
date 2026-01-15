@@ -248,6 +248,10 @@ export interface DetailedLatency {
 export interface StreamingStatus {
   is_active: boolean;
   remote_addr: string | null;
+  /** Whether microphone is muted */
+  is_muted: boolean;
+  /** Current input audio level (0-100) */
+  input_level: number;
   /** Network statistics */
   network: NetworkStats | null;
   /** Detailed latency breakdown */
@@ -310,9 +314,45 @@ export async function streamingSetOutputDevice(
   return invoke("streaming_set_output_device", { deviceId });
 }
 
+/**
+ * Set mute state
+ * @param muted Whether to mute the microphone
+ */
+export async function streamingSetMute(muted: boolean): Promise<void> {
+  return invoke("streaming_set_mute", { muted });
+}
+
+/**
+ * Get mute state
+ * @returns Whether the microphone is muted
+ */
+export async function streamingGetMute(): Promise<boolean> {
+  return invoke("streaming_get_mute");
+}
+
+/**
+ * Get current input audio level
+ * @returns Audio level from 0 to 100
+ */
+export async function streamingGetInputLevel(): Promise<number> {
+  return invoke("streaming_get_input_level");
+}
+
 // ============================================================================
 // Configuration API
 // ============================================================================
+
+/**
+ * Connection history entry
+ */
+export interface ConnectionHistoryEntry {
+  /** Room code used for the connection */
+  room_code: string;
+  /** Timestamp of the connection (ISO 8601 format) */
+  connected_at: string;
+  /** Optional user-defined label for this connection */
+  label: string | null;
+}
 
 /**
  * Application configuration
@@ -328,6 +368,8 @@ export interface AppConfig {
   signaling_server_url: string | null;
   /** Selected audio preset */
   preset: AudioPresetId;
+  /** Connection history (most recent first) */
+  connection_history: ConnectionHistoryEntry[];
 }
 
 /**
@@ -412,4 +454,62 @@ export async function configSetPreset(
   presetName: AudioPresetId
 ): Promise<PresetInfo> {
   return invoke("config_set_preset", { presetName });
+}
+
+// ============================================================================
+// Connection History API
+// ============================================================================
+
+/**
+ * Get connection history
+ * @returns List of past connections, most recent first
+ */
+export async function configGetConnectionHistory(): Promise<
+  ConnectionHistoryEntry[]
+> {
+  return invoke("config_get_connection_history");
+}
+
+/**
+ * Add a connection to history
+ * @param roomCode Room code that was used
+ * @param label Optional label for this connection
+ */
+export async function configAddConnectionHistory(
+  roomCode: string,
+  label?: string
+): Promise<void> {
+  return invoke("config_add_connection_history", {
+    roomCode,
+    label: label ?? null,
+  });
+}
+
+/**
+ * Remove a connection from history
+ * @param roomCode Room code to remove
+ */
+export async function configRemoveConnectionHistory(
+  roomCode: string
+): Promise<void> {
+  return invoke("config_remove_connection_history", { roomCode });
+}
+
+/**
+ * Clear all connection history
+ */
+export async function configClearConnectionHistory(): Promise<void> {
+  return invoke("config_clear_connection_history");
+}
+
+/**
+ * Update connection history entry label
+ * @param roomCode Room code to update
+ * @param label New label (or null to remove label)
+ */
+export async function configUpdateConnectionHistoryLabel(
+  roomCode: string,
+  label: string | null
+): Promise<void> {
+  return invoke("config_update_connection_history_label", { roomCode, label });
 }
