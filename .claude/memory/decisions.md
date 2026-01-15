@@ -25,6 +25,16 @@
 - docs-spec/adr/ が既に設計判断を管理しているため、harness の memory/ は軽量なメモ用途に限定
 - 重要な決定は ADR に昇格するフローを維持
 
+### 2025-01-15: Core Library Architecture の明文化
+
+**状況**: CLI と GUI でコードが重複しているように見え、共通化すべきか検討が必要だった
+**決定**: 現状の3層アーキテクチャ（Interface Layer / Core Library）を維持。セッションオーケストレーションは各インターフェースに残す
+**理由**:
+- コアロジック（audio/network/protocol）は既に共通化済み
+- オーケストレーション層は制御フローが異なる（CLI: 同期的, GUI: 非同期IPC）
+- 2つのインターフェースでは抽象化のコストがメリットを上回る
+- 詳細: [ADR-011](../../docs-spec/adr/ADR-011-core-library-architecture.md)
+
 ---
 
 <!-- 新しい決定はここに追加 -->
