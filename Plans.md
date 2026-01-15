@@ -65,6 +65,12 @@
 
 ### 2026-01-15
 
+- [x] **IPv4/IPv6デュアルスタック対応 E2Eテスト**
+  - `tests/dual_stack_test.rs` 13件のE2Eテスト追加
+  - 候補収集、優先度、接続確立、後方互換性テスト
+  - ユニットテスト12件追加（signaling.rs, connection.rs）
+  - 全178テスト合格
+
 - [x] **フェーズ4完了: 仕上げ**
   - E2Eテスト: `tests/signaling_e2e_test.rs` 10件追加
   - マニュアル: troubleshooting.md新規作成、quick-start.md更新
