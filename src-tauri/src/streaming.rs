@@ -157,6 +157,8 @@ pub struct StreamingState {
     is_muted: Arc<AtomicBool>,
     /// Current input audio level (0-100, RMS normalized)
     input_level: Arc<AtomicU32>,
+    /// Current output audio level (0-100, for master meter)
+    output_level: Arc<AtomicU32>,
     /// Remote address currently connected to
     remote_addr: Mutex<Option<String>>,
     /// Connection statistics (updated by audio thread)
@@ -165,6 +167,12 @@ pub struct StreamingState {
     buffer_size: Mutex<u32>,
     /// Buffer underrun count (audio glitches due to CPU/scheduling)
     underrun_count: Arc<AtomicU64>,
+    /// Peer (received) audio volume (0-200, 100 = unity gain)
+    peer_volume: Arc<AtomicU32>,
+    /// Master output volume (0-200, 100 = unity gain)
+    master_volume: Arc<AtomicU32>,
+    /// Peer (received) audio pan (-100 = full left, 0 = center, 100 = full right)
+    peer_pan: Arc<std::sync::atomic::AtomicI32>,
 }
 
 impl StreamingState {
@@ -174,10 +182,14 @@ impl StreamingState {
             is_active: Arc::new(AtomicBool::new(false)),
             is_muted: Arc::new(AtomicBool::new(false)),
             input_level: Arc::new(AtomicU32::new(0)),
+            output_level: Arc::new(AtomicU32::new(0)),
             remote_addr: Mutex::new(None),
             stats: Arc::new(RwLock::new(None)),
             buffer_size: Mutex::new(64), // Default: 64 samples
             underrun_count: Arc::new(AtomicU64::new(0)),
+            peer_volume: Arc::new(AtomicU32::new(100)), // 100 = unity gain
+            master_volume: Arc::new(AtomicU32::new(100)), // 100 = unity gain
+            peer_pan: Arc::new(std::sync::atomic::AtomicI32::new(0)), // 0 = center
         }
     }
 
@@ -200,6 +212,9 @@ enum StreamingCommand {
     SetInputDevice(Option<String>),
     SetOutputDevice(Option<String>),
     SetMute(bool),
+    SetPeerVolume(f32),
+    SetMasterVolume(f32),
+    SetPeerPan(i32),
 }
 
 /// Network statistics for IPC
@@ -265,6 +280,8 @@ pub struct StreamingStatus {
     pub is_muted: bool,
     /// Current input audio level (0-100)
     pub input_level: u32,
+    /// Current output audio level (0-100, for master meter)
+    pub output_level: u32,
     /// Network statistics
     pub network: Option<NetworkStats>,
     /// Detailed latency breakdown
@@ -316,13 +333,22 @@ pub async fn streaming_start(
     let is_active = state.is_active.clone();
     let is_muted = state.is_muted.clone();
     let input_level = state.input_level.clone();
+    let output_level = state.output_level.clone();
     let shared_stats = state.stats.clone();
     let underrun_count = state.underrun_count.clone();
+    let peer_volume = state.peer_volume.clone();
+    let master_volume = state.master_volume.clone();
+    let peer_pan = state.peer_pan.clone();
 
-    // Reset mute state and underrun count on new connection
+    // Reset state on new connection
     state.is_muted.store(false, Ordering::SeqCst);
     state.input_level.store(0, Ordering::SeqCst);
+    state.output_level.store(0, Ordering::SeqCst);
     state.underrun_count.store(0, Ordering::SeqCst);
+    // Reset volumes to unity gain and pan to center
+    state.peer_volume.store(100, Ordering::SeqCst);
+    state.master_volume.store(100, Ordering::SeqCst);
+    state.peer_pan.store(0, Ordering::SeqCst);
 
     // Mark as active BEFORE spawning thread to avoid race condition
     state.is_active.store(true, Ordering::SeqCst);
@@ -348,8 +374,12 @@ pub async fn streaming_start(
                 &is_active,
                 &is_muted,
                 &input_level,
+                &output_level,
                 &shared_stats,
                 &underrun_count,
+                &peer_volume,
+                &master_volume,
+                &peer_pan,
             )
             .await
             {
@@ -412,6 +442,7 @@ pub async fn streaming_status(
     let is_active = state.is_active.load(Ordering::SeqCst);
     let is_muted = state.is_muted.load(Ordering::SeqCst);
     let input_level = state.input_level.load(Ordering::SeqCst);
+    let output_level = state.output_level.load(Ordering::SeqCst);
     let remote_addr = state.remote_addr.lock().await.clone();
     let stats = state.stats.read().ok().and_then(|s| s.clone());
 
@@ -502,6 +533,7 @@ pub async fn streaming_status(
         remote_addr,
         is_muted,
         input_level,
+        output_level,
         network,
         latency,
         audio_quality,
@@ -584,6 +616,93 @@ pub async fn streaming_get_input_level(
     Ok(state.input_level.load(Ordering::SeqCst))
 }
 
+/// Set peer (received audio) volume
+/// Volume is 0-200 where 100 = unity gain (1.0x), 200 = 2.0x
+#[tauri::command]
+pub async fn streaming_set_peer_volume(
+    volume: u32,
+    state: tauri::State<'_, StreamingState>,
+) -> Result<(), String> {
+    let clamped = volume.min(200);
+    state.peer_volume.store(clamped, Ordering::SeqCst);
+
+    // If streaming, also send command to audio thread
+    if state.is_active.load(Ordering::SeqCst) {
+        let tx = state.cmd_tx.lock().await;
+        if let Some(ref sender) = *tx {
+            let _ = sender.send(StreamingCommand::SetPeerVolume(clamped as f32 / 100.0));
+        }
+    }
+
+    Ok(())
+}
+
+/// Get peer volume (0-200, 100 = unity)
+#[tauri::command]
+pub async fn streaming_get_peer_volume(
+    state: tauri::State<'_, StreamingState>,
+) -> Result<u32, String> {
+    Ok(state.peer_volume.load(Ordering::SeqCst))
+}
+
+/// Set master output volume
+/// Volume is 0-200 where 100 = unity gain (1.0x), 200 = 2.0x
+#[tauri::command]
+pub async fn streaming_set_master_volume(
+    volume: u32,
+    state: tauri::State<'_, StreamingState>,
+) -> Result<(), String> {
+    let clamped = volume.min(200);
+    state.master_volume.store(clamped, Ordering::SeqCst);
+
+    // If streaming, also send command to audio thread
+    if state.is_active.load(Ordering::SeqCst) {
+        let tx = state.cmd_tx.lock().await;
+        if let Some(ref sender) = *tx {
+            let _ = sender.send(StreamingCommand::SetMasterVolume(clamped as f32 / 100.0));
+        }
+    }
+
+    Ok(())
+}
+
+/// Get master volume (0-200, 100 = unity)
+#[tauri::command]
+pub async fn streaming_get_master_volume(
+    state: tauri::State<'_, StreamingState>,
+) -> Result<u32, String> {
+    Ok(state.master_volume.load(Ordering::SeqCst))
+}
+
+/// Set peer (received audio) pan
+/// Pan is -100 (full left) to 100 (full right), 0 = center
+#[tauri::command]
+pub async fn streaming_set_peer_pan(
+    pan: i32,
+    state: tauri::State<'_, StreamingState>,
+) -> Result<(), String> {
+    let clamped = pan.clamp(-100, 100);
+    state.peer_pan.store(clamped, Ordering::SeqCst);
+
+    // If streaming, also send command to audio thread
+    if state.is_active.load(Ordering::SeqCst) {
+        let tx = state.cmd_tx.lock().await;
+        if let Some(ref sender) = *tx {
+            let _ = sender.send(StreamingCommand::SetPeerPan(clamped));
+        }
+    }
+
+    Ok(())
+}
+
+/// Get peer pan (-100 to 100, 0 = center)
+#[tauri::command]
+pub async fn streaming_get_peer_pan(
+    state: tauri::State<'_, StreamingState>,
+) -> Result<i32, String> {
+    Ok(state.peer_pan.load(Ordering::SeqCst))
+}
+
 /// Run audio streaming in the audio thread
 async fn run_audio_streaming(
     remote_addr: SocketAddr,
@@ -594,15 +713,24 @@ async fn run_audio_streaming(
     is_active: &AtomicBool,
     is_muted: &AtomicBool,
     input_level: &AtomicU32,
+    output_level: &AtomicU32,
     shared_stats: &RwLock<Option<ConnectionStats>>,
     underrun_count: &AtomicU64,
+    peer_volume: &AtomicU32,
+    master_volume: &AtomicU32,
+    peer_pan: &std::sync::atomic::AtomicI32,
 ) -> Result<(), String> {
-    // Audio configuration - buffer_size controls latency vs stability tradeoff
-    // Lower values = less latency but may cause crackling
-    // Higher values = more stable but higher latency
-    let config = AudioConfig {
+    // Capture config: mono (for network transmission)
+    let capture_config = AudioConfig {
         sample_rate: AUDIO_SAMPLE_RATE,
         channels: 1,
+        frame_size: buffer_size,
+    };
+
+    // Playback config: stereo (for pan support)
+    let playback_config = AudioConfig {
+        sample_rate: AUDIO_SAMPLE_RATE,
+        channels: 2,
         frame_size: buffer_size,
     };
 
@@ -611,8 +739,9 @@ async fn run_audio_streaming(
         .await
         .map_err(|e| format!("Failed to create connection: {}", e))?;
 
-    // Create audio engine
-    let mut audio_engine = AudioEngine::new(config);
+    // Create separate audio engines for capture (mono) and playback (stereo)
+    let mut capture_engine = AudioEngine::new(capture_config);
+    let mut playback_engine = AudioEngine::new(playback_config);
 
     let input_id = input_device_id.map(DeviceId);
     let output_id = output_device_id.map(DeviceId);
@@ -629,8 +758,8 @@ async fn run_audio_streaming(
     let input_level_for_capture = Arc::new(AtomicU32::new(0));
     let input_level_capture_ref = input_level_for_capture.clone();
 
-    // Start audio capture with level metering
-    audio_engine
+    // Start audio capture with level metering (mono)
+    capture_engine
         .start_capture(input_id.as_ref(), move |samples, timestamp| {
             // Calculate RMS level (0-100)
             if !samples.is_empty() {
@@ -645,8 +774,8 @@ async fn run_audio_streaming(
         })
         .map_err(|e| format!("Failed to start capture: {}", e))?;
 
-    // Start audio playback
-    audio_engine
+    // Start audio playback (stereo)
+    playback_engine
         .start_playback(output_id.as_ref())
         .map_err(|e| format!("Failed to start playback: {}", e))?;
 
@@ -706,7 +835,7 @@ async fn run_audio_streaming(
                 println!("Switching input device to: {:?}", device_id);
                 let new_device_id = device_id.map(DeviceId);
                 let tx_clone = tx_capture_for_switch.clone();
-                if let Err(e) = audio_engine.set_input_device(
+                if let Err(e) = capture_engine.set_input_device(
                     new_device_id.as_ref(),
                     move |samples, timestamp| {
                         let _ = tx_clone.try_send((samples.to_vec(), timestamp as u32));
@@ -718,13 +847,25 @@ async fn run_audio_streaming(
             Ok(StreamingCommand::SetOutputDevice(device_id)) => {
                 println!("Switching output device to: {:?}", device_id);
                 let new_device_id = device_id.map(DeviceId);
-                if let Err(e) = audio_engine.set_output_device(new_device_id.as_ref()) {
+                if let Err(e) = playback_engine.set_output_device(new_device_id.as_ref()) {
                     eprintln!("Failed to switch output device: {}", e);
                 }
             }
             Ok(StreamingCommand::SetMute(muted)) => {
                 println!("Setting mute state to: {}", muted);
                 is_muted_for_send.store(muted, Ordering::SeqCst);
+            }
+            Ok(StreamingCommand::SetPeerVolume(vol)) => {
+                println!("Setting peer volume to: {}", vol);
+                peer_volume.store((vol * 100.0) as u32, Ordering::SeqCst);
+            }
+            Ok(StreamingCommand::SetMasterVolume(vol)) => {
+                println!("Setting master volume to: {}", vol);
+                master_volume.store((vol * 100.0) as u32, Ordering::SeqCst);
+            }
+            Ok(StreamingCommand::SetPeerPan(pan)) => {
+                println!("Setting peer pan to: {}", pan);
+                peer_pan.store(pan, Ordering::SeqCst);
             }
             Err(std_mpsc::TryRecvError::Disconnected) => {
                 println!("Command channel disconnected");
@@ -753,14 +894,44 @@ async fn run_audio_streaming(
             }
             // Update shared input level from capture callback
             input_level.store(input_level_for_capture.load(Ordering::SeqCst), Ordering::SeqCst);
-            // Update underrun count from audio engine
-            underrun_count.store(audio_engine.underrun_count(), Ordering::Relaxed);
+            // Update underrun count from playback engine
+            underrun_count.store(playback_engine.underrun_count(), Ordering::Relaxed);
         }
 
         // Process received audio with timeout
         tokio::select! {
             Some(samples) = rx_playback.recv() => {
-                audio_engine.enqueue_playback(&samples);
+                // Apply peer volume and master volume
+                let peer_vol = peer_volume.load(Ordering::Relaxed) as f32 / 100.0;
+                let master_vol = master_volume.load(Ordering::Relaxed) as f32 / 100.0;
+                let combined_vol = peer_vol * master_vol;
+
+                // Get pan value and calculate constant power pan gains
+                // Pan: -100 = full left, 0 = center, 100 = full right
+                let pan = peer_pan.load(Ordering::Relaxed);
+                let pan_normalized = (pan + 100) as f32 / 200.0; // 0.0 to 1.0
+                // Constant power panning: at center (0.5), both channels get ~0.707
+                let angle = pan_normalized * std::f32::consts::FRAC_PI_2;
+                let left_gain = angle.cos();
+                let right_gain = angle.sin();
+
+                // Convert mono to stereo with pan and volume applied
+                let mut stereo_samples = Vec::with_capacity(samples.len() * 2);
+                for mono_sample in samples.iter() {
+                    let scaled = mono_sample * combined_vol;
+                    stereo_samples.push(scaled * left_gain);  // Left channel
+                    stereo_samples.push(scaled * right_gain); // Right channel
+                }
+
+                // Calculate RMS for output level metering (from stereo mix)
+                if !stereo_samples.is_empty() {
+                    let sum_sq: f32 = stereo_samples.iter().map(|s| s * s).sum();
+                    let rms = (sum_sq / stereo_samples.len() as f32).sqrt();
+                    let level = ((rms * 100.0).min(100.0)).round() as u32;
+                    output_level.store(level, Ordering::Relaxed);
+                }
+
+                playback_engine.enqueue_playback(&stereo_samples);
             }
             _ = tokio::time::sleep(tokio::time::Duration::from_millis(10)) => {
                 // Timeout, check commands again
@@ -776,8 +947,8 @@ async fn run_audio_streaming(
         conn.disconnect();
     }
 
-    audio_engine.stop_capture();
-    audio_engine.stop_playback();
+    capture_engine.stop_capture();
+    playback_engine.stop_playback();
 
     println!("Streaming stopped.");
 

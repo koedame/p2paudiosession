@@ -260,6 +260,8 @@ export interface StreamingStatus {
   is_muted: boolean;
   /** Current input audio level (0-100) */
   input_level: number;
+  /** Current output audio level (0-100, for master meter) */
+  output_level: number;
   /** Network statistics */
   network: NetworkStats | null;
   /** Detailed latency breakdown */
@@ -346,6 +348,54 @@ export async function streamingGetMute(): Promise<boolean> {
  */
 export async function streamingGetInputLevel(): Promise<number> {
   return invoke("streaming_get_input_level");
+}
+
+/**
+ * Set peer (received audio) volume
+ * @param volume Volume from 0 to 200 (100 = unity gain, 200 = 2x)
+ */
+export async function streamingSetPeerVolume(volume: number): Promise<void> {
+  return invoke("streaming_set_peer_volume", { volume: Math.round(volume) });
+}
+
+/**
+ * Get peer volume
+ * @returns Volume from 0 to 200 (100 = unity)
+ */
+export async function streamingGetPeerVolume(): Promise<number> {
+  return invoke("streaming_get_peer_volume");
+}
+
+/**
+ * Set master output volume
+ * @param volume Volume from 0 to 200 (100 = unity gain, 200 = 2x)
+ */
+export async function streamingSetMasterVolume(volume: number): Promise<void> {
+  return invoke("streaming_set_master_volume", { volume: Math.round(volume) });
+}
+
+/**
+ * Get master volume
+ * @returns Volume from 0 to 200 (100 = unity)
+ */
+export async function streamingGetMasterVolume(): Promise<number> {
+  return invoke("streaming_get_master_volume");
+}
+
+/**
+ * Set peer (received audio) pan
+ * @param pan Pan from -100 (full left) to 100 (full right), 0 = center
+ */
+export async function streamingSetPeerPan(pan: number): Promise<void> {
+  return invoke("streaming_set_peer_pan", { pan: Math.round(pan) });
+}
+
+/**
+ * Get peer pan
+ * @returns Pan from -100 to 100 (0 = center)
+ */
+export async function streamingGetPeerPan(): Promise<number> {
+  return invoke("streaming_get_peer_pan");
 }
 
 // ============================================================================

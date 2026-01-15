@@ -8,9 +8,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { ConnectionIndicator } from "../components/ConnectionIndicator";
 import { SessionStats } from "../components/SessionStats";
-import { MuteButton } from "../components/MuteButton";
-import { InputLevelMeter } from "../components/InputLevelMeter";
 import { ConnectionHistory } from "../components/ConnectionHistory";
+import { MixerConsole, type Participant } from "../components/Mixer";
 import { formatErrorForDisplay } from "../lib/errorMessages";
 import {
   signalingConnect,
@@ -25,6 +24,9 @@ import {
   streamingSetMute,
   audioGetCurrentDevices,
   audioGetBufferSize,
+  streamingSetPeerVolume,
+  streamingSetMasterVolume,
+  streamingSetPeerPan,
   configLoad,
   configSetServerUrl,
   configGetConnectionHistory,
@@ -72,6 +74,7 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
   const prevUnderrunTime = useRef<number>(Date.now());
   const [isMuted, setIsMuted] = useState(false);
   const [inputLevel, setInputLevel] = useState(0);
+  const [outputLevel, setOutputLevel] = useState(0);
   const [connectionHistory, setConnectionHistory] = useState<ConnectionHistoryEntry[]>([]);
 
   // Update html lang attribute when language changes
@@ -121,6 +124,7 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
       prevUnderrunCount.current = 0;
       prevUnderrunTime.current = Date.now();
       setInputLevel(0);
+      setOutputLevel(0);
       return;
     }
 
@@ -132,6 +136,7 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
           setDetailedLatency(status.latency);
           setIsMuted(status.is_muted);
           setInputLevel(status.input_level);
+          setOutputLevel(status.output_level);
 
           // Calculate underrun rate (per second)
           if (status.audio_quality) {
@@ -362,6 +367,38 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
       setConnectionHistory((prev) => prev.filter((e) => e.room_code !== roomCode));
     } catch (e) {
       console.error("Failed to remove from history:", e);
+    }
+  }, []);
+
+  // Handle peer volume change from mixer
+  const handlePeerVolumeChange = useCallback(async (_participantId: string, volume: number) => {
+    try {
+      // Convert 0-100 fader range to 0-200 backend range (100 = unity)
+      const backendVolume = Math.round(volume * 2);
+      await streamingSetPeerVolume(backendVolume);
+    } catch (e) {
+      console.error("Failed to set peer volume:", e);
+    }
+  }, []);
+
+  // Handle master volume change from mixer
+  const handleMasterVolumeChange = useCallback(async (volume: number) => {
+    try {
+      // Convert 0-100 fader range to 0-200 backend range (100 = unity)
+      const backendVolume = Math.round(volume * 2);
+      await streamingSetMasterVolume(backendVolume);
+    } catch (e) {
+      console.error("Failed to set master volume:", e);
+    }
+  }, []);
+
+  // Handle peer pan change from mixer
+  const handlePeerPanChange = useCallback(async (_participantId: string, pan: number) => {
+    try {
+      // Pan is already -100 to 100, send directly to backend
+      await streamingSetPeerPan(pan);
+    } catch (e) {
+      console.error("Failed to set peer pan:", e);
     }
   }, []);
 
@@ -616,20 +653,6 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
             </ul>
           </div>
 
-          {/* Audio controls: mute button and input level meter */}
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-md)",
-            marginBottom: "var(--space-lg)",
-            padding: "var(--space-md)",
-            backgroundColor: "var(--color-bg-tertiary)",
-            borderRadius: "var(--radius-md)"
-          }}>
-            <MuteButton isMuted={isMuted} onToggle={handleToggleMute} />
-            <InputLevelMeter level={inputLevel} isMuted={isMuted} variant="default" />
-          </div>
-
           <button
             className="main-card__join-btn"
             style={{ width: "100%" }}
@@ -637,6 +660,24 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
           >
             {t("session.leave.button")}
           </button>
+        </div>
+
+        {/* Mixer Console - outside card for horizontal expansion */}
+        <div className="main-mixer">
+          <MixerConsole
+            inputLevel={inputLevel}
+            isInputMuted={isMuted}
+            participants={sessionState.participants.map((name, index): Participant => ({
+              id: `peer-${index}`,
+              name: name,
+              level: outputLevel,
+            }))}
+            masterLevel={outputLevel}
+            onInputMuteToggle={handleToggleMute}
+            onParticipantVolumeChange={handlePeerVolumeChange}
+            onParticipantPanChange={handlePeerPanChange}
+            onMasterVolumeChange={handleMasterVolumeChange}
+          />
         </div>
 
         {/* Detailed Session Statistics */}

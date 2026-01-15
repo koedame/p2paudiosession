@@ -82,14 +82,16 @@
     }
   },
   "mixer": {
+    "self": "You",
+    "master": "Master",
     "channel": {
       "you": "You",
       "mute": "Mute",
       "unmute": "Unmute",
       "solo": "Solo"
     },
-    "master": {
-      "volume": "Master Volume"
+    "volume": {
+      "master": "Master Volume"
     }
   },
   "mute": {

@@ -365,3 +365,17 @@
   background-color: var(--color-bg-hover);
   color: var(--color-text-primary);
 }
+
+/* Mixer container - outside card for horizontal expansion */
+.main-mixer {
+  width: 100%;
+  overflow-x: auto;
+  padding: var(--space-md) 0;
+  display: flex;
+  justify-content: center;
+}
+
+/* Allow mixer to expand beyond card width */
+.main-mixer > * {
+  flex-shrink: 0;
+}

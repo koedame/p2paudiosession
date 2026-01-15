@@ -1,0 +1,126 @@
+/**
+ * VerticalMeter styles - DAW-style level meter
+ */
+
+.vertical-meter {
+  display: flex;
+  gap: 2px;
+  position: relative;
+}
+
+.vertical-meter--muted {
+  opacity: 0.4;
+}
+
+/* dB Scale */
+.vertical-meter__scale {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  width: 24px;
+  font-size: 9px;
+  color: var(--mixer-text-dim, #888);
+  font-variant-numeric: tabular-nums;
+}
+
+.vertical-meter__mark {
+  position: absolute;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  transform: translateY(-50%);
+}
+
+.vertical-meter__mark-label {
+  text-align: right;
+  min-width: 16px;
+}
+
+.vertical-meter__mark-line {
+  width: 4px;
+  height: 1px;
+  background-color: var(--mixer-text-dim, #666);
+}
+
+/* Meter bar */
+.vertical-meter__bar {
+  position: relative;
+  width: 12px;
+  background-color: var(--mixer-meter-bg, #1a1a1a);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+/* Background segments (always visible, dimmed) */
+.vertical-meter__segments {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  opacity: 0.15;
+}
+
+.vertical-meter__segment {
+  flex: 1;
+}
+
+.vertical-meter__segment--red {
+  flex: 0 0 20%;
+  background: linear-gradient(to bottom, #ff3333, #ff6633);
+}
+
+.vertical-meter__segment--yellow {
+  flex: 0 0 30%;
+  background: linear-gradient(to bottom, #ff6633, #ffcc00, #99cc00);
+}
+
+.vertical-meter__segment--green {
+  flex: 1;
+  background: linear-gradient(to bottom, #99cc00, #33cc33, #009933);
+}
+
+/* Active fill - gradient from bottom (green) to top (red) */
+.vertical-meter__fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(
+    to top,
+    #009933 0%,
+    #33cc33 30%,
+    #99cc00 50%,
+    #ffcc00 65%,
+    #ff6633 80%,
+    #ff3333 100%
+  );
+  transition: height 50ms ease-out;
+}
+
+/* Peak indicator */
+.vertical-meter__peak {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: #ffcc00;
+  box-shadow: 0 0 4px rgba(255, 204, 0, 0.5);
+}
+
+/* Stereo variant with two bars */
+.vertical-meter--stereo .vertical-meter__bar {
+  display: flex;
+  gap: 1px;
+  width: 24px;
+}
+
+.vertical-meter--stereo .vertical-meter__bar::before,
+.vertical-meter--stereo .vertical-meter__bar::after {
+  content: "";
+  flex: 1;
+  background-color: var(--mixer-meter-bg, #1a1a1a);
+}

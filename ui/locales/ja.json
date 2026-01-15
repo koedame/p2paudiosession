@@ -81,14 +81,16 @@
     }
   },
   "mixer": {
+    "self": "自分",
+    "master": "マスター",
     "channel": {
       "you": "自分",
       "mute": "ミュート",
       "unmute": "ミュート解除",
       "solo": "ソロ"
     },
-    "master": {
-      "volume": "マスター音量"
+    "volume": {
+      "master": "マスター音量"
     }
   },
   "mute": {

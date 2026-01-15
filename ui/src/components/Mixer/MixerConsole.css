@@ -1,0 +1,40 @@
+/**
+ * MixerConsole styles - Container for the mixer
+ */
+
+.mixer-console {
+  background-color: var(--mixer-bg, #252525);
+  border-radius: 8px;
+  padding: 12px;
+  overflow-x: auto;
+}
+
+.mixer-console__channels {
+  display: flex;
+  gap: 4px;
+  min-width: fit-content;
+}
+
+.mixer-console__spacer {
+  flex: 1;
+  min-width: 20px;
+}
+
+/* Scrollbar styling */
+.mixer-console::-webkit-scrollbar {
+  height: 8px;
+}
+
+.mixer-console::-webkit-scrollbar-track {
+  background: var(--mixer-bg, #252525);
+  border-radius: 4px;
+}
+
+.mixer-console::-webkit-scrollbar-thumb {
+  background: #4a4a4a;
+  border-radius: 4px;
+}
+
+.mixer-console::-webkit-scrollbar-thumb:hover {
+  background: #5a5a5a;
+}
