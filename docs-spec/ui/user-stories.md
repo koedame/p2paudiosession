@@ -156,7 +156,7 @@ sequenceDiagram
 #### 関連
 
 - BDD: なし（UI固有）
-- コンポーネント: [mixer-channel.md](./components/mixer-channel.md)
+- コンポーネント: 未作成（mixer-channel）
 
 ---
 
