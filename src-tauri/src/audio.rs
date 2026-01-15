@@ -11,11 +11,13 @@ use jamjam::audio::{list_input_devices, list_output_devices};
 /// Audio state managed by Tauri
 ///
 /// Note: AudioEngine is not stored here because cpal's Stream is not Send+Sync.
-/// This state only tracks the selected device IDs. Actual audio engine initialization
-/// will be done separately when needed.
+/// This state only tracks the selected device IDs and buffer settings.
+/// Actual audio engine initialization will be done separately when needed.
 pub struct AudioState {
     current_input_id: Mutex<Option<String>>,
     current_output_id: Mutex<Option<String>>,
+    /// Buffer size (frame_size) in samples. Valid values: 32, 64, 128, 256
+    buffer_size: Mutex<u32>,
 }
 
 impl AudioState {
@@ -23,6 +25,7 @@ impl AudioState {
         Self {
             current_input_id: Mutex::new(None),
             current_output_id: Mutex::new(None),
+            buffer_size: Mutex::new(64), // Default: 64 samples @ 48kHz = 1.33ms
         }
     }
 }
@@ -139,4 +142,32 @@ pub fn audio_get_current_devices(
         input_device_id: input,
         output_device_id: output,
     })
+}
+
+/// Get current buffer size (frame_size in samples)
+#[tauri::command]
+pub fn audio_get_buffer_size(state: tauri::State<'_, AudioState>) -> Result<u32, String> {
+    let size = state.buffer_size.lock().map_err(|e| e.to_string())?;
+    Ok(*size)
+}
+
+/// Set buffer size (frame_size in samples)
+///
+/// Valid values: 32, 64, 128, 256
+/// Lower values = less latency but may cause audio crackling
+/// Higher values = more stable but higher latency
+#[tauri::command]
+pub fn audio_set_buffer_size(size: u32, state: tauri::State<'_, AudioState>) -> Result<(), String> {
+    // Validate buffer size
+    if ![32, 64, 128, 256].contains(&size) {
+        return Err(format!(
+            "Invalid buffer size: {}. Valid values are 32, 64, 128, 256",
+            size
+        ));
+    }
+
+    let mut current = state.buffer_size.lock().map_err(|e| e.to_string())?;
+    *current = size;
+
+    Ok(())
 }

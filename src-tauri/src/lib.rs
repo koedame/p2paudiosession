@@ -35,6 +35,8 @@ pub fn run() {
             audio::audio_set_input_device,
             audio::audio_set_output_device,
             audio::audio_get_current_devices,
+            audio::audio_get_buffer_size,
+            audio::audio_set_buffer_size,
             streaming::streaming_start,
             streaming::streaming_stop,
             streaming::streaming_status,

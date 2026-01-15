@@ -168,6 +168,24 @@ export async function audioGetCurrentDevices(): Promise<CurrentDevices> {
   return invoke("audio_get_current_devices");
 }
 
+/**
+ * Get current buffer size (frame_size in samples)
+ * @returns Buffer size (32, 64, 128, or 256)
+ */
+export async function audioGetBufferSize(): Promise<number> {
+  return invoke("audio_get_buffer_size");
+}
+
+/**
+ * Set buffer size (frame_size in samples)
+ * Lower values = less latency but may cause audio crackling
+ * Higher values = more stable but higher latency
+ * @param size Buffer size (32, 64, 128, or 256)
+ */
+export async function audioSetBufferSize(size: number): Promise<void> {
+  return invoke("audio_set_buffer_size", { size });
+}
+
 // ============================================================================
 // Streaming API
 // ============================================================================
@@ -239,16 +257,19 @@ export interface StreamingStatus {
  * @param remoteAddr Remote address in format "ip:port"
  * @param inputDeviceId Optional input device ID
  * @param outputDeviceId Optional output device ID
+ * @param bufferSize Buffer size in samples (32, 64, 128, or 256). Default: 64
  */
 export async function streamingStart(
   remoteAddr: string,
   inputDeviceId?: string,
-  outputDeviceId?: string
+  outputDeviceId?: string,
+  bufferSize?: number
 ): Promise<void> {
   return invoke("streaming_start", {
     remoteAddr,
     inputDeviceId: inputDeviceId ?? null,
     outputDeviceId: outputDeviceId ?? null,
+    bufferSize: bufferSize ?? 64,
   });
 }
 

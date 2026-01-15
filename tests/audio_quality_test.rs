@@ -193,17 +193,17 @@ fn test_default_configs() {
     let audio_config = AudioConfig::default();
     assert_eq!(audio_config.sample_rate, 48000);
     assert_eq!(audio_config.channels, 1);
-    assert_eq!(audio_config.frame_size, 128);
+    assert_eq!(audio_config.frame_size, 64);
 
     let capture_config = CaptureConfig::default();
     assert_eq!(capture_config.sample_rate, 48000);
     assert_eq!(capture_config.channels, 1);
-    assert_eq!(capture_config.frame_size, 128);
+    assert_eq!(capture_config.frame_size, 64);
     assert_eq!(capture_config.bit_depth, BitDepth::F32);
 
     let playback_config = PlaybackConfig::default();
     assert_eq!(playback_config.sample_rate, 48000);
     assert_eq!(playback_config.channels, 1);
-    assert_eq!(playback_config.frame_size, 128);
+    assert_eq!(playback_config.frame_size, 64);
     assert_eq!(playback_config.bit_depth, BitDepth::F32);
 }

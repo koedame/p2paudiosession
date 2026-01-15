@@ -244,7 +244,7 @@ mod tests {
             encode_ms: 0.0,
             decode_ms: 0.0,
             jitter_buffer_ms: 5.0,
-            frame_size: 128,
+            frame_size: 32,
             sample_rate: 48000,
             codec: "pcm".to_string(),
         };

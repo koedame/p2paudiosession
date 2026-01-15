@@ -10,6 +10,8 @@ import {
   audioSetInputDevice,
   audioSetOutputDevice,
   audioGetCurrentDevices,
+  audioGetBufferSize,
+  audioSetBufferSize,
   streamingStatus,
   streamingSetInputDevice,
   streamingSetOutputDevice,
@@ -26,21 +28,36 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
   const [outputDevices, setOutputDevices] = useState<AudioDeviceInfo[]>([]);
   const [selectedInputId, setSelectedInputId] = useState<string | null>(null);
   const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null);
+  const [bufferSize, setBufferSize] = useState<number>(64);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load devices on mount
+  // Buffer size options: 32, 64, 128, 256
+  const bufferSizeOptions = [32, 64, 128, 256];
+  const bufferSizeToIndex = (size: number) =>
+    bufferSizeOptions.indexOf(size) !== -1
+      ? bufferSizeOptions.indexOf(size)
+      : 1;
+  const indexToBufferSize = (index: number) =>
+    bufferSizeOptions[index] ?? 64;
+
+  // Load devices and settings on mount
   useEffect(() => {
     const loadDevices = async () => {
       try {
         setIsLoading(true);
         setError(null);
 
-        const [inputs, outputs, current] = await Promise.all([
-          audioListInputDevices(),
-          audioListOutputDevices(),
-          audioGetCurrentDevices(),
-        ]);
+        const [inputs, outputs, current, currentBufferSize] = await Promise.all(
+          [
+            audioListInputDevices(),
+            audioListOutputDevices(),
+            audioGetCurrentDevices(),
+            audioGetBufferSize(),
+          ]
+        );
+
+        setBufferSize(currentBufferSize);
 
         setInputDevices(inputs);
         setOutputDevices(outputs);
@@ -115,6 +132,20 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
     }
   };
 
+  const handleBufferSizeChange = async (newSize: number) => {
+    try {
+      setError(null);
+      await audioSetBufferSize(newSize);
+      setBufferSize(newSize);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  // Calculate latency in ms for display
+  const calculateLatencyMs = (samples: number) =>
+    ((samples / 48000) * 1000).toFixed(2);
+
   return (
     <div className="settings-screen">
       <header className="settings-header">
@@ -151,6 +182,46 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
               onDeviceChange={handleOutputChange}
               isLoading={isLoading}
             />
+          </div>
+        </div>
+
+        <div className="settings-card">
+          <h2 className="settings-card__title">Audio Buffer</h2>
+          <p className="settings-card__hint">
+            Lower values reduce latency but may cause crackling. Higher values
+            are more stable but add latency.
+          </p>
+
+          <div className="buffer-slider">
+            <div className="buffer-slider__labels">
+              {bufferSizeOptions.map((size) => (
+                <span
+                  key={size}
+                  className={`buffer-slider__label ${
+                    size === bufferSize ? "buffer-slider__label--active" : ""
+                  }`}
+                >
+                  {size}
+                </span>
+              ))}
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="3"
+              step="1"
+              value={bufferSizeToIndex(bufferSize)}
+              onChange={(e) =>
+                handleBufferSizeChange(indexToBufferSize(Number(e.target.value)))
+              }
+              className="buffer-slider__input"
+              disabled={isLoading}
+            />
+            <div className="buffer-slider__info">
+              <span className="buffer-slider__value">
+                {bufferSize} samples ({calculateLatencyMs(bufferSize)} ms)
+              </span>
+            </div>
           </div>
         </div>
       </main>

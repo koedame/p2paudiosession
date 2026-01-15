@@ -52,7 +52,7 @@ impl Default for AudioConfig {
         Self {
             sample_rate: 48000,
             channels: 1,
-            frame_size: 128,
+            frame_size: 64,
         }
     }
 }
@@ -75,7 +75,7 @@ impl Default for CaptureConfig {
         Self {
             sample_rate: 48000,
             channels: 1,
-            frame_size: 128,
+            frame_size: 64,
             bit_depth: BitDepth::F32,
         }
     }
@@ -109,7 +109,7 @@ impl Default for PlaybackConfig {
         Self {
             sample_rate: 48000,
             channels: 1,
-            frame_size: 128,
+            frame_size: 64,
             bit_depth: BitDepth::F32,
         }
     }
@@ -334,8 +334,9 @@ impl AudioEngine {
             buffer_size: cpal::BufferSize::Fixed(self.config.frame_size),
         };
 
-        // Create ring buffer for playback (10 frames worth of buffer)
-        let buffer_size = (self.config.frame_size * self.config.channels as u32 * 10) as usize;
+        // Create ring buffer for playback - minimal size for lowest latency
+        // 3 frames to prevent underruns
+        let buffer_size = (self.config.frame_size * self.config.channels as u32 * 3) as usize;
         let rb = HeapRb::<f32>::new(buffer_size);
         let (producer, consumer) = rb.split();
         // Wrap producer in Arc<Mutex<>> for sharing with capture callback
@@ -523,7 +524,7 @@ mod tests {
         let config = AudioConfig::default();
         assert_eq!(config.sample_rate, 48000);
         assert_eq!(config.channels, 1);
-        assert_eq!(config.frame_size, 128);
+        assert_eq!(config.frame_size, 64);
     }
 
     #[test]

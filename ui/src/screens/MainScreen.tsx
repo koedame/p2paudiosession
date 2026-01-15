@@ -19,6 +19,7 @@ import {
   streamingStop,
   streamingStatus,
   audioGetCurrentDevices,
+  audioGetBufferSize,
   type RoomInfo,
   type PeerInfo,
   type NetworkStats,
@@ -186,14 +187,18 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
         const addr = peerWithAddr.public_addr || peerWithAddr.local_addr;
         if (addr) {
           try {
-            // Get currently selected devices from settings
-            const devices = await audioGetCurrentDevices();
+            // Get currently selected devices and buffer size from settings
+            const [devices, bufferSize] = await Promise.all([
+              audioGetCurrentDevices(),
+              audioGetBufferSize(),
+            ]);
             await streamingStart(
               addr,
               devices.input_device_id ?? undefined,
-              devices.output_device_id ?? undefined
+              devices.output_device_id ?? undefined,
+              bufferSize
             );
-            console.log("Streaming started to:", addr, "with devices:", devices);
+            console.log("Streaming started to:", addr, "with devices:", devices, "bufferSize:", bufferSize);
           } catch (streamErr) {
             console.error("Failed to start streaming:", streamErr);
           }

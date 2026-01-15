@@ -15,9 +15,9 @@ use tokio::sync::Mutex;
 use jamjam::audio::{AudioConfig, AudioEngine, DeviceId};
 use jamjam::network::{Connection, ConnectionStats, LatencyBreakdown, LocalLatencyInfo};
 
-/// Audio configuration used for latency calculations
+/// Audio sample rate used for latency calculations
+/// Target: < 2ms one-way app latency (see CLAUDE.md requirements)
 const AUDIO_SAMPLE_RATE: u32 = 48000;
-const AUDIO_FRAME_SIZE: u32 = 128;
 
 /// Streaming state managed by Tauri
 pub struct StreamingState {
@@ -29,6 +29,8 @@ pub struct StreamingState {
     remote_addr: Mutex<Option<String>>,
     /// Connection statistics (updated by audio thread)
     stats: Arc<RwLock<Option<ConnectionStats>>>,
+    /// Current buffer size (frame_size) for latency calculations
+    buffer_size: Mutex<u32>,
 }
 
 impl StreamingState {
@@ -38,12 +40,14 @@ impl StreamingState {
             is_active: Arc::new(AtomicBool::new(false)),
             remote_addr: Mutex::new(None),
             stats: Arc::new(RwLock::new(None)),
+            buffer_size: Mutex::new(64), // Default: 64 samples
         }
     }
 
     /// Get local latency info based on audio config
     fn local_latency_info(&self) -> LocalLatencyInfo {
-        LocalLatencyInfo::from_audio_config(AUDIO_FRAME_SIZE, AUDIO_SAMPLE_RATE, "pcm")
+        let frame_size = self.buffer_size.try_lock().map(|s| *s).unwrap_or(64);
+        LocalLatencyInfo::from_audio_config(frame_size, AUDIO_SAMPLE_RATE, "pcm")
     }
 }
 
@@ -124,6 +128,7 @@ pub async fn streaming_start(
     remote_addr: String,
     input_device_id: Option<String>,
     output_device_id: Option<String>,
+    buffer_size: u32,
     state: tauri::State<'_, StreamingState>,
 ) -> Result<(), String> {
     // Check if already streaming
@@ -151,6 +156,12 @@ pub async fn streaming_start(
         *addr_lock = Some(remote_addr.clone());
     }
 
+    // Store buffer size for latency display
+    {
+        let mut bs = state.buffer_size.lock().await;
+        *bs = buffer_size;
+    }
+
     let is_active = state.is_active.clone();
     let shared_stats = state.stats.clone();
 
@@ -170,6 +181,7 @@ pub async fn streaming_start(
                 addr,
                 input_device_id,
                 output_device_id,
+                buffer_size,
                 cmd_rx,
                 &is_active,
                 &shared_stats,
@@ -239,6 +251,7 @@ pub async fn streaming_status(
     let (network, latency) = if let Some(ref s) = stats {
         let local_info = state.local_latency_info();
         let breakdown = LatencyBreakdown::calculate(&local_info, None, s.rtt_ms, s.jitter_ms);
+        let frame_size = state.buffer_size.lock().await;
 
         let network = NetworkStats {
             rtt_ms: s.rtt_ms,
@@ -257,7 +270,7 @@ pub async fn streaming_status(
                 ms: breakdown.upstream.capture_buffer_ms,
                 info: Some(format!(
                     "{} samples @ {} Hz",
-                    AUDIO_FRAME_SIZE, AUDIO_SAMPLE_RATE
+                    *frame_size, AUDIO_SAMPLE_RATE
                 )),
             },
             LatencyComponent {
@@ -291,7 +304,7 @@ pub async fn streaming_status(
             LatencyComponent {
                 name: "Playback buffer".to_string(),
                 ms: breakdown.downstream.playback_buffer_ms,
-                info: Some(format!("{} samples", AUDIO_FRAME_SIZE)),
+                info: Some(format!("{} samples", *frame_size)),
             },
         ];
 
@@ -361,15 +374,18 @@ async fn run_audio_streaming(
     remote_addr: SocketAddr,
     input_device_id: Option<String>,
     output_device_id: Option<String>,
+    buffer_size: u32,
     cmd_rx: std_mpsc::Receiver<StreamingCommand>,
     is_active: &AtomicBool,
     shared_stats: &RwLock<Option<ConnectionStats>>,
 ) -> Result<(), String> {
-    // Audio configuration
+    // Audio configuration - buffer_size controls latency vs stability tradeoff
+    // Lower values = less latency but may cause crackling
+    // Higher values = more stable but higher latency
     let config = AudioConfig {
-        sample_rate: 48000,
+        sample_rate: AUDIO_SAMPLE_RATE,
         channels: 1,
-        frame_size: 128,
+        frame_size: buffer_size,
     };
 
     // Create connection
@@ -383,9 +399,10 @@ async fn run_audio_streaming(
     let input_id = input_device_id.map(DeviceId);
     let output_id = output_device_id.map(DeviceId);
 
-    // Create channels for audio data
-    let (tx_capture, mut rx_capture) = tokio::sync::mpsc::channel::<(Vec<f32>, u32)>(64);
-    let (tx_playback, mut rx_playback) = tokio::sync::mpsc::channel::<Vec<f32>>(64);
+    // Create channels for audio data - minimal buffering for lowest latency
+    // 2 slots = just enough for thread synchronization without accumulating delay
+    let (tx_capture, mut rx_capture) = tokio::sync::mpsc::channel::<(Vec<f32>, u32)>(4);
+    let (tx_playback, mut rx_playback) = tokio::sync::mpsc::channel::<Vec<f32>>(4);
 
     // Keep a clone for device switching
     let tx_capture_for_switch = tx_capture.clone();
