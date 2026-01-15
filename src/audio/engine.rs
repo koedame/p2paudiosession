@@ -1,6 +1,6 @@
 //! Audio engine for capture and playback
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
@@ -183,6 +183,8 @@ pub struct AudioEngine {
     current_output_device: Option<DeviceId>,
     // Event sender for device change notifications
     event_tx: Option<Sender<AudioEvent>>,
+    // Audio quality metrics
+    underrun_count: Arc<AtomicU64>,
 }
 
 impl AudioEngine {
@@ -198,7 +200,18 @@ impl AudioEngine {
             current_input_device: None,
             current_output_device: None,
             event_tx: None,
+            underrun_count: Arc::new(AtomicU64::new(0)),
         }
+    }
+
+    /// Get the number of buffer underruns since playback started
+    pub fn underrun_count(&self) -> u64 {
+        self.underrun_count.load(Ordering::Relaxed)
+    }
+
+    /// Reset the underrun counter
+    pub fn reset_underrun_count(&self) {
+        self.underrun_count.store(0, Ordering::Relaxed);
     }
 
     /// Set event sender for device change notifications
@@ -344,6 +357,7 @@ impl AudioEngine {
 
         let consumer = Arc::new(std::sync::Mutex::new(consumer));
         let consumer_clone = consumer.clone();
+        let underrun_counter = self.underrun_count.clone();
 
         // Error callback with device disconnection detection
         let event_tx = self.event_tx.clone();
@@ -370,15 +384,26 @@ impl AudioEngine {
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                     // Use try_lock to avoid blocking in real-time audio callback
                     if let Ok(mut cons) = consumer_clone.try_lock() {
-                        // Read samples from ring buffer
+                        // Read samples from ring buffer, track underruns
+                        let mut had_underrun = false;
                         for sample in data.iter_mut() {
-                            *sample = cons.try_pop().unwrap_or(0.0);
+                            if let Some(s) = cons.try_pop() {
+                                *sample = s;
+                            } else {
+                                // Buffer empty - underrun!
+                                *sample = 0.0;
+                                had_underrun = true;
+                            }
+                        }
+                        if had_underrun {
+                            underrun_counter.fetch_add(1, Ordering::Relaxed);
                         }
                     } else {
                         // Lock not available, output silence to avoid blocking
                         for sample in data.iter_mut() {
                             *sample = 0.0;
                         }
+                        underrun_counter.fetch_add(1, Ordering::Relaxed);
                     }
                 },
                 err_fn,

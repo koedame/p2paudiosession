@@ -243,6 +243,14 @@ export interface DetailedLatency {
 }
 
 /**
+ * Audio quality metrics
+ */
+export interface AudioQuality {
+  /** Number of buffer underruns (audio glitches due to CPU/scheduling) */
+  underrun_count: number;
+}
+
+/**
  * Streaming status information
  */
 export interface StreamingStatus {
@@ -256,6 +264,8 @@ export interface StreamingStatus {
   network: NetworkStats | null;
   /** Detailed latency breakdown */
   latency: DetailedLatency | null;
+  /** Audio quality metrics */
+  audio_quality: AudioQuality | null;
 }
 
 /**

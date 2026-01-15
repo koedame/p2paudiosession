@@ -10,6 +10,8 @@ import "./SessionStats.css";
 export interface SessionStatsProps {
   network: NetworkStats | null;
   latency: DetailedLatency | null;
+  /** Underrun rate per second */
+  underrunRate?: number;
 }
 
 function formatBytes(bytes: number): string {
@@ -18,14 +20,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds} sec`;
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
-}
-
-export function SessionStats({ network, latency }: SessionStatsProps) {
+export function SessionStats({ network, latency, underrunRate = 0 }: SessionStatsProps) {
   if (!network || !latency) {
     return (
       <div className="session-stats session-stats--empty">
@@ -53,8 +48,10 @@ export function SessionStats({ network, latency }: SessionStatsProps) {
             <span className="session-stats__value">{network.packet_loss_percent.toFixed(1)} %</span>
           </div>
           <div className="session-stats__item">
-            <span className="session-stats__label">Uptime</span>
-            <span className="session-stats__value">{formatDuration(Number(network.uptime_seconds))}</span>
+            <span className="session-stats__label">Underruns</span>
+            <span className={`session-stats__value ${underrunRate > 0.5 ? "session-stats__value--warning" : ""}`}>
+              {underrunRate.toFixed(1)}/s
+            </span>
           </div>
         </div>
       </section>

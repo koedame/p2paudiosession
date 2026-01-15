@@ -102,10 +102,32 @@
   "settings": {
     "title": "Settings",
     "audio": {
-      "title": "Audio"
+      "title": "Audio",
+      "preset": "Audio Preset",
+      "presetHint": "Select a preset based on your network environment.",
+      "devices": "Audio Devices",
+      "buffer": "Audio Buffer",
+      "bufferHint": "Lower = less latency but may crackle. Higher = more stable.",
+      "bufferValue": "{{samples}} samples ({{ms}} ms)"
     },
     "preset": {
-      "title": "Mode Settings"
+      "title": "Mode Settings",
+      "zeroLatency": {
+        "name": "Zero Latency",
+        "useCase": "Fiber connections"
+      },
+      "ultraLowLatency": {
+        "name": "Ultra Low Latency",
+        "useCase": "LAN sessions"
+      },
+      "balanced": {
+        "name": "Balanced",
+        "useCase": "Typical internet"
+      },
+      "highQuality": {
+        "name": "High Quality",
+        "useCase": "Recording"
+      }
     },
     "advanced": {
       "title": "Advanced Settings",
@@ -121,7 +143,7 @@
       "theme": "Theme",
       "themeDark": "Dark",
       "themeLight": "Light",
-      "themeSystem": "System Default"
+      "themeSystem": "System"
     }
   },
   "status": {

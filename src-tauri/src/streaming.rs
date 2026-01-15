@@ -4,7 +4,7 @@
 //! the non-Send+Sync AudioEngine.
 
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc as std_mpsc;
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -18,6 +18,134 @@ use jamjam::network::{Connection, ConnectionStats, LatencyBreakdown, LocalLatenc
 /// Audio sample rate used for latency calculations
 /// Target: < 2ms one-way app latency (see CLAUDE.md requirements)
 const AUDIO_SAMPLE_RATE: u32 = 48000;
+
+/// Real-time thread priority for Linux (1-99, higher = more priority)
+/// 99 = maximum, but risks system freeze if thread hangs
+/// 90 = very high, leaves headroom for critical kernel threads
+#[cfg(target_os = "linux")]
+const REALTIME_PRIORITY: i32 = 90;
+
+/// Set real-time priority for the CURRENT thread (call from within audio thread)
+/// This reduces buffer underruns by giving the audio thread scheduling priority
+#[cfg(target_os = "macos")]
+fn set_current_thread_realtime_priority() {
+    // Use macOS Mach thread policy API - this is what professional DAWs use
+    // (Logic Pro, Ableton, Pro Tools, etc.)
+    // Does NOT require root, and is more effective than SCHED_FIFO on macOS
+
+    #[repr(C)]
+    struct ThreadTimeConstraintPolicy {
+        period: u32,        // Interval between processing (in Mach absolute time units)
+        computation: u32,   // Time needed for computation
+        constraint: u32,    // Maximum time before deadline
+        preemptible: i32,   // Can be preempted?
+    }
+
+    const THREAD_TIME_CONSTRAINT_POLICY: u32 = 2;
+    const THREAD_TIME_CONSTRAINT_POLICY_COUNT: u32 = 4;
+
+    extern "C" {
+        fn mach_thread_self() -> u32;
+        fn thread_policy_set(
+            thread: u32,
+            flavor: u32,
+            policy_info: *const ThreadTimeConstraintPolicy,
+            count: u32,
+        ) -> i32;
+        fn mach_timebase_info(info: *mut MachTimebaseInfo) -> i32;
+    }
+
+    #[repr(C)]
+    struct MachTimebaseInfo {
+        numer: u32,
+        denom: u32,
+    }
+
+    unsafe {
+        // Get timebase info to convert nanoseconds to Mach absolute time
+        let mut timebase = MachTimebaseInfo { numer: 0, denom: 0 };
+        mach_timebase_info(&mut timebase);
+
+        // Convert nanoseconds to Mach absolute time units
+        let ns_to_abs = |ns: u64| -> u32 {
+            ((ns * timebase.denom as u64) / timebase.numer as u64) as u32
+        };
+
+        // Audio timing constraints (for 48kHz, ~1ms period with small buffer)
+        // period: how often the thread runs (e.g., every 1ms for audio callback)
+        // computation: how much CPU time it needs per period
+        // constraint: deadline (must complete within this time)
+        let period_ns = 1_000_000;       // 1ms period (audio callback interval)
+        let computation_ns = 500_000;    // 0.5ms computation time
+        let constraint_ns = 1_000_000;   // 1ms deadline
+
+        let policy = ThreadTimeConstraintPolicy {
+            period: ns_to_abs(period_ns),
+            computation: ns_to_abs(computation_ns),
+            constraint: ns_to_abs(constraint_ns),
+            preemptible: 0,  // Don't preempt during computation
+        };
+
+        let thread = mach_thread_self();
+        let result = thread_policy_set(
+            thread,
+            THREAD_TIME_CONSTRAINT_POLICY,
+            &policy,
+            THREAD_TIME_CONSTRAINT_POLICY_COUNT,
+        );
+
+        if result == 0 {
+            println!("Audio thread: macOS real-time priority enabled (TIME_CONSTRAINT)");
+        } else {
+            // Fall back to nice value
+            libc::setpriority(libc::PRIO_PROCESS, 0, -20);
+            println!("Audio thread: using nice -20 (TIME_CONSTRAINT failed: {})", result);
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn set_current_thread_realtime_priority() {
+    unsafe {
+        let policy = libc::SCHED_FIFO;
+        let mut param: libc::sched_param = std::mem::zeroed();
+        param.sched_priority = REALTIME_PRIORITY;
+        let result = libc::pthread_setschedparam(libc::pthread_self(), policy, &param);
+        if result != 0 {
+            // Fall back to nice value if SCHED_FIFO fails (requires rtprio limit)
+            libc::setpriority(libc::PRIO_PROCESS, 0, -20);
+            println!("Audio thread: using nice -20 (SCHED_FIFO requires rtprio config)");
+        } else {
+            println!("Audio thread: real-time priority enabled (SCHED_FIFO {})", REALTIME_PRIORITY);
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn set_current_thread_realtime_priority() {
+    use windows::Win32::System::Threading::{
+        GetCurrentProcess, GetCurrentThread, SetPriorityClass, SetThreadPriority,
+        HIGH_PRIORITY_CLASS, THREAD_PRIORITY_TIME_CRITICAL,
+    };
+
+    unsafe {
+        // First, elevate the process priority class
+        let _ = SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+
+        // Then set thread to TIME_CRITICAL (highest within the priority class)
+        let result = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+        if result.is_ok() {
+            println!("Audio thread: real-time priority enabled (HIGH + TIME_CRITICAL)");
+        } else {
+            println!("Audio thread: failed to set thread priority");
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+fn set_current_thread_realtime_priority() {
+    println!("Audio thread: real-time priority not supported on this platform");
+}
 
 /// Streaming state managed by Tauri
 pub struct StreamingState {
@@ -35,6 +163,8 @@ pub struct StreamingState {
     stats: Arc<RwLock<Option<ConnectionStats>>>,
     /// Current buffer size (frame_size) for latency calculations
     buffer_size: Mutex<u32>,
+    /// Buffer underrun count (audio glitches due to CPU/scheduling)
+    underrun_count: Arc<AtomicU64>,
 }
 
 impl StreamingState {
@@ -47,6 +177,7 @@ impl StreamingState {
             remote_addr: Mutex::new(None),
             stats: Arc::new(RwLock::new(None)),
             buffer_size: Mutex::new(64), // Default: 64 samples
+            underrun_count: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -92,6 +223,13 @@ pub struct NetworkStats {
     pub bytes_received: u64,
 }
 
+/// Audio quality metrics for IPC
+#[derive(Debug, Clone, Serialize)]
+pub struct AudioQuality {
+    /// Number of buffer underruns (audio glitches due to CPU/scheduling)
+    pub underrun_count: u64,
+}
+
 /// Latency component breakdown for IPC
 #[derive(Debug, Clone, Serialize)]
 pub struct LatencyComponent {
@@ -131,6 +269,8 @@ pub struct StreamingStatus {
     pub network: Option<NetworkStats>,
     /// Detailed latency breakdown
     pub latency: Option<DetailedLatency>,
+    /// Audio quality metrics
+    pub audio_quality: Option<AudioQuality>,
 }
 
 /// Start audio streaming to a remote peer
@@ -177,16 +317,21 @@ pub async fn streaming_start(
     let is_muted = state.is_muted.clone();
     let input_level = state.input_level.clone();
     let shared_stats = state.stats.clone();
+    let underrun_count = state.underrun_count.clone();
 
-    // Reset mute state on new connection
+    // Reset mute state and underrun count on new connection
     state.is_muted.store(false, Ordering::SeqCst);
     state.input_level.store(0, Ordering::SeqCst);
+    state.underrun_count.store(0, Ordering::SeqCst);
 
     // Mark as active BEFORE spawning thread to avoid race condition
     state.is_active.store(true, Ordering::SeqCst);
 
-    // Spawn audio thread
+    // Spawn audio thread with real-time priority
     thread::spawn(move || {
+        // Set real-time priority immediately upon thread start
+        set_current_thread_realtime_priority();
+
         // Create tokio runtime for this thread
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -204,6 +349,7 @@ pub async fn streaming_start(
                 &is_muted,
                 &input_level,
                 &shared_stats,
+                &underrun_count,
             )
             .await
             {
@@ -342,6 +488,15 @@ pub async fn streaming_status(
         (None, None)
     };
 
+    // Audio quality metrics
+    let audio_quality = if is_active {
+        Some(AudioQuality {
+            underrun_count: state.underrun_count.load(Ordering::Relaxed),
+        })
+    } else {
+        None
+    };
+
     Ok(StreamingStatus {
         is_active,
         remote_addr,
@@ -349,6 +504,7 @@ pub async fn streaming_status(
         input_level,
         network,
         latency,
+        audio_quality,
     })
 }
 
@@ -439,6 +595,7 @@ async fn run_audio_streaming(
     is_muted: &AtomicBool,
     input_level: &AtomicU32,
     shared_stats: &RwLock<Option<ConnectionStats>>,
+    underrun_count: &AtomicU64,
 ) -> Result<(), String> {
     // Audio configuration - buffer_size controls latency vs stability tradeoff
     // Lower values = less latency but may cause crackling
@@ -596,6 +753,8 @@ async fn run_audio_streaming(
             }
             // Update shared input level from capture callback
             input_level.store(input_level_for_capture.load(Ordering::SeqCst), Ordering::SeqCst);
+            // Update underrun count from audio engine
+            underrun_count.store(audio_engine.underrun_count(), Ordering::Relaxed);
         }
 
         // Process received audio with timeout

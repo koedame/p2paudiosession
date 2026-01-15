@@ -101,10 +101,32 @@
   "settings": {
     "title": "設定",
     "audio": {
-      "title": "オーディオ"
+      "title": "オーディオ",
+      "preset": "オーディオプリセット",
+      "presetHint": "ネットワーク環境に合わせてプリセットを選択してください。",
+      "devices": "オーディオデバイス",
+      "buffer": "オーディオバッファ",
+      "bufferHint": "小さい値 = 低遅延だがノイズが出やすい。大きい値 = 安定。",
+      "bufferValue": "{{samples}}サンプル ({{ms}} ms)"
     },
     "preset": {
-      "title": "モード設定"
+      "title": "モード設定",
+      "zeroLatency": {
+        "name": "ゼロレイテンシー",
+        "useCase": "光回線同士"
+      },
+      "ultraLowLatency": {
+        "name": "超低遅延",
+        "useCase": "LAN接続"
+      },
+      "balanced": {
+        "name": "バランス",
+        "useCase": "一般的なインターネット"
+      },
+      "highQuality": {
+        "name": "高音質",
+        "useCase": "録音向け"
+      }
     },
     "advanced": {
       "title": "詳細設定",
@@ -120,7 +142,7 @@
       "theme": "テーマ",
       "themeDark": "ダーク",
       "themeLight": "ライト",
-      "themeSystem": "システム設定に従う"
+      "themeSystem": "システム"
     }
   },
   "status": {

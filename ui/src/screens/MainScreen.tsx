@@ -4,11 +4,10 @@
  * Entry point for session creation and joining.
  * Displays connection status and provides room management UI.
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { ConnectionIndicator } from "../components/ConnectionIndicator";
 import { SessionStats } from "../components/SessionStats";
-import { PresetRecommendation } from "../components/PresetRecommendation";
 import { MuteButton } from "../components/MuteButton";
 import { InputLevelMeter } from "../components/InputLevelMeter";
 import { ConnectionHistory } from "../components/ConnectionHistory";
@@ -26,10 +25,8 @@ import {
   streamingSetMute,
   audioGetCurrentDevices,
   audioGetBufferSize,
-  audioSetBufferSize,
   configLoad,
   configSetServerUrl,
-  configSetPreset,
   configGetConnectionHistory,
   configAddConnectionHistory,
   configRemoveConnectionHistory,
@@ -37,7 +34,6 @@ import {
   type PeerInfo,
   type NetworkStats,
   type DetailedLatency,
-  type AudioPresetId,
   type ConnectionHistoryEntry,
 } from "../lib/tauri";
 import "./MainScreen.css";
@@ -54,9 +50,11 @@ type SessionState =
 
 export interface MainScreenProps {
   onSettingsClick?: () => void;
+  /** Version counter to trigger config reload when settings change */
+  settingsVersion?: number;
 }
 
-export function MainScreen({ onSettingsClick }: MainScreenProps) {
+export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps) {
   const { t, i18n } = useTranslation();
   const [sessionState, setSessionState] = useState<SessionState>({ status: "idle" });
   const [serverUrl, setServerUrl] = useState("ws://localhost:8080");
@@ -67,7 +65,11 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
   const [currentInviteCode, setCurrentInviteCode] = useState("");
   const [networkStats, setNetworkStats] = useState<NetworkStats | null>(null);
   const [detailedLatency, setDetailedLatency] = useState<DetailedLatency | null>(null);
-  const [currentPreset, setCurrentPreset] = useState<AudioPresetId>("balanced");
+  const [underrunRate, setUnderrunRate] = useState<number>(0);
+
+  // Refs for calculating underrun rate
+  const prevUnderrunCount = useRef<number>(0);
+  const prevUnderrunTime = useRef<number>(Date.now());
   const [isMuted, setIsMuted] = useState(false);
   const [inputLevel, setInputLevel] = useState(0);
   const [connectionHistory, setConnectionHistory] = useState<ConnectionHistoryEntry[]>([]);
@@ -85,9 +87,6 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
         if (config.signaling_server_url) {
           setServerUrl(config.signaling_server_url);
         }
-        if (config.preset) {
-          setCurrentPreset(config.preset);
-        }
       } catch (e) {
         // Config file might not exist yet, use defaults
         console.log("No saved config found, using defaults");
@@ -102,7 +101,7 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
       }
     };
     loadConfig();
-  }, []);
+  }, [settingsVersion]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -118,6 +117,9 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
     if (sessionState.status !== "connected") {
       setNetworkStats(null);
       setDetailedLatency(null);
+      setUnderrunRate(0);
+      prevUnderrunCount.current = 0;
+      prevUnderrunTime.current = Date.now();
       setInputLevel(0);
       return;
     }
@@ -130,6 +132,23 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
           setDetailedLatency(status.latency);
           setIsMuted(status.is_muted);
           setInputLevel(status.input_level);
+
+          // Calculate underrun rate (per second)
+          if (status.audio_quality) {
+            const now = Date.now();
+            const currentCount = status.audio_quality.underrun_count;
+            const deltaCount = currentCount - prevUnderrunCount.current;
+            const deltaTime = (now - prevUnderrunTime.current) / 1000; // seconds
+
+            if (deltaTime > 0) {
+              const instantRate = deltaCount / deltaTime;
+              // Exponential moving average for smoothing (alpha = 0.3)
+              setUnderrunRate((prev) => prev * 0.7 + instantRate * 0.3);
+            }
+
+            prevUnderrunCount.current = currentCount;
+            prevUnderrunTime.current = now;
+          }
         }
       } catch (e) {
         console.error("Failed to get streaming status:", e);
@@ -320,19 +339,6 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
     onSettingsClick?.();
   };
 
-  // Handle preset switch from recommendation
-  const handlePresetSwitch = async (presetId: AudioPresetId) => {
-    try {
-      const appliedPreset = await configSetPreset(presetId);
-      setCurrentPreset(presetId);
-      // Also update the audio system's buffer size
-      await audioSetBufferSize(appliedPreset.buffer_size);
-      console.log("Switched to preset:", presetId, "buffer size:", appliedPreset.buffer_size);
-    } catch (e) {
-      console.error("Failed to switch preset:", e);
-    }
-  };
-
   // Handle mute toggle
   const handleToggleMute = useCallback(async () => {
     try {
@@ -403,10 +409,6 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
             onChange={(e) => setPeerName(e.target.value)}
           />
         </div>
-      </div>
-
-      <div className="main-mode">
-        {t("settings.preset.title")}: <span className="main-mode__value">{t("preset.balanced.name")}</span>
       </div>
     </>
   );
@@ -637,15 +639,8 @@ export function MainScreen({ onSettingsClick }: MainScreenProps) {
           </button>
         </div>
 
-        {/* Preset Recommendation based on jitter */}
-        <PresetRecommendation
-          jitterMs={networkStats?.jitter_ms ?? null}
-          currentPreset={currentPreset}
-          onSwitchPreset={handlePresetSwitch}
-        />
-
         {/* Detailed Session Statistics */}
-        <SessionStats network={networkStats} latency={detailedLatency} />
+        <SessionStats network={networkStats} latency={detailedLatency} underrunRate={underrunRate} />
       </>
     );
   };

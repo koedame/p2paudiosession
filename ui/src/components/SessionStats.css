@@ -62,6 +62,11 @@
   font-weight: 600;
 }
 
+.session-stats__value--warning {
+  color: var(--color-warning, #f59e0b);
+  font-weight: 600;
+}
+
 /* Latency Groups */
 .session-stats__latency-group {
   margin-bottom: var(--space-sm);

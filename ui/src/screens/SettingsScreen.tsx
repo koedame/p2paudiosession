@@ -18,11 +18,7 @@ import {
   streamingSetOutputDevice,
   configLoad,
   configSave,
-  configListPresets,
-  configSetPreset,
   type AppConfig,
-  type PresetInfo,
-  type AudioPresetId,
 } from "../lib/tauri";
 import { DeviceSelector } from "../components/DeviceSelector";
 import { useTheme } from "../hooks/useTheme";
@@ -31,33 +27,6 @@ import "./SettingsScreen.css";
 export interface SettingsScreenProps {
   onBack: () => void;
 }
-
-// Preset display information
-const PRESET_DISPLAY: Record<
-  AudioPresetId,
-  { name: string; description: string; useCase: string }
-> = {
-  "zero-latency": {
-    name: "Zero Latency",
-    description: "Jitter buffer off, 32 samples",
-    useCase: "Fiber connections (Japan domestic)",
-  },
-  "ultra-low-latency": {
-    name: "Ultra Low Latency",
-    description: "1 frame buffer, 64 samples",
-    useCase: "LAN sessions",
-  },
-  balanced: {
-    name: "Balanced",
-    description: "4 frame buffer, 128 samples",
-    useCase: "Typical internet",
-  },
-  "high-quality": {
-    name: "High Quality",
-    description: "8 frame buffer, 256 samples",
-    useCase: "Recording / High-speed connections",
-  },
-};
 
 export function SettingsScreen({ onBack }: SettingsScreenProps) {
   const { t } = useTranslation();
@@ -69,11 +38,9 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
   const [bufferSize, setBufferSize] = useState<number>(64);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [presets, setPresets] = useState<PresetInfo[]>([]);
-  const [selectedPreset, setSelectedPreset] = useState<AudioPresetId>("balanced");
 
-  // Buffer size options: 32, 64, 128, 256
-  const bufferSizeOptions = [32, 64, 128, 256];
+  // Buffer size options: 8, 16, 32, 64, 128, 256
+  const bufferSizeOptions = [8, 16, 32, 64, 128, 256];
   const bufferSizeToIndex = (size: number) =>
     bufferSizeOptions.indexOf(size) !== -1
       ? bufferSizeOptions.indexOf(size)
@@ -88,22 +55,15 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
         setIsLoading(true);
         setError(null);
 
-        const [inputs, outputs, current, currentBufferSize, presetList, config] =
+        const [inputs, outputs, current, currentBufferSize] =
           await Promise.all([
             audioListInputDevices(),
             audioListOutputDevices(),
             audioGetCurrentDevices(),
             audioGetBufferSize(),
-            configListPresets(),
-            configLoad().catch(() => null),
           ]);
 
         setBufferSize(currentBufferSize);
-        setPresets(presetList);
-        if (config?.preset) {
-          setSelectedPreset(config.preset);
-        }
-
         setInputDevices(inputs);
         setOutputDevices(outputs);
 
@@ -217,21 +177,6 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
     }
   };
 
-  const handlePresetChange = async (presetId: AudioPresetId) => {
-    try {
-      setError(null);
-      // Set preset and apply its settings (buffer size is auto-applied by backend)
-      const appliedPreset = await configSetPreset(presetId);
-      setSelectedPreset(presetId);
-      setBufferSize(appliedPreset.buffer_size);
-
-      // Also update the audio system's buffer size
-      await audioSetBufferSize(appliedPreset.buffer_size);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
   // Calculate latency in ms for display
   const calculateLatencyMs = (samples: number) =>
     ((samples / 48000) * 1000).toFixed(2);
@@ -251,39 +196,6 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
       </header>
 
       <main className="settings-content">
-        {/* Preset Selection */}
-        <div className="settings-card">
-          <h2 className="settings-card__title">Audio Preset</h2>
-          <p className="settings-card__hint">
-            Select a preset based on your network environment. This will
-            automatically configure buffer settings.
-          </p>
-
-          <div className="preset-selector">
-            {presets.map((preset) => {
-              const display = PRESET_DISPLAY[preset.id];
-              const isSelected = preset.id === selectedPreset;
-              return (
-                <button
-                  key={preset.id}
-                  className={`preset-option ${isSelected ? "preset-option--selected" : ""}`}
-                  onClick={() => handlePresetChange(preset.id)}
-                  disabled={isLoading}
-                >
-                  <div className="preset-option__header">
-                    <span className="preset-option__name">{display.name}</span>
-                    {isSelected && <span className="preset-option__check">✓</span>}
-                  </div>
-                  <div className="preset-option__details">
-                    <span className="preset-option__desc">{display.description}</span>
-                    <span className="preset-option__usecase">{display.useCase}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         {/* Audio Devices */}
         <div className="settings-card">
           <h2 className="settings-card__title">Audio Devices</h2>
@@ -332,7 +244,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
             <input
               type="range"
               min="0"
-              max="3"
+              max="5"
               step="1"
               value={bufferSizeToIndex(bufferSize)}
               onChange={(e) =>

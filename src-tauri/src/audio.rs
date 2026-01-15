@@ -153,15 +153,15 @@ pub fn audio_get_buffer_size(state: tauri::State<'_, AudioState>) -> Result<u32,
 
 /// Set buffer size (frame_size in samples)
 ///
-/// Valid values: 32, 64, 128, 256
+/// Valid values: 8, 16, 32, 64, 128, 256
 /// Lower values = less latency but may cause audio crackling
 /// Higher values = more stable but higher latency
 #[tauri::command]
 pub fn audio_set_buffer_size(size: u32, state: tauri::State<'_, AudioState>) -> Result<(), String> {
     // Validate buffer size
-    if ![32, 64, 128, 256].contains(&size) {
+    if ![8, 16, 32, 64, 128, 256].contains(&size) {
         return Err(format!(
-            "Invalid buffer size: {}. Valid values are 32, 64, 128, 256",
+            "Invalid buffer size: {}. Valid values are 8, 16, 32, 64, 128, 256",
             size
         ));
     }
