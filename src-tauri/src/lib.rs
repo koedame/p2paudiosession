@@ -49,6 +49,9 @@ pub fn run() {
             config::config_save,
             config::config_get_server_url,
             config::config_set_server_url,
+            config::config_list_presets,
+            config::config_get_preset,
+            config::config_set_preset,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
