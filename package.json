@@ -2,6 +2,8 @@
   "private": true,
   "scripts": {
     "tauri:dev": "cd ui && npm install && npm run dev",
-    "tauri:build": "cd ui && npm install && npm run build"
+    "tauri:build": "cd ui && npm install && npm run build",
+    "tauri:build:test": "cd ui && npm install && npm run build -- --mode test",
+    "tauri:build:prod": "cd ui && npm install && npm run build -- --mode production"
   }
 }

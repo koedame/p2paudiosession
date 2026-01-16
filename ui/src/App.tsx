@@ -26,6 +26,11 @@ function App() {
     setSettingsVersion((v) => v + 1);
   };
 
+  const handleSettingsChange = () => {
+    // Increment version to trigger MainScreen config reload in real-time
+    setSettingsVersion((v) => v + 1);
+  };
+
   return (
     <>
       <MainScreen onSettingsClick={handleOpenSettings} settingsVersion={settingsVersion} />
@@ -34,7 +39,7 @@ function App() {
         onClose={handleCloseSettings}
         title={t("settings.title")}
       >
-        <SettingsPanel />
+        <SettingsPanel onSettingsChange={handleSettingsChange} />
       </SidePanel>
     </>
   );

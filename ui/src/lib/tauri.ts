@@ -573,3 +573,19 @@ export async function configUpdateConnectionHistoryLabel(
 ): Promise<void> {
   return invoke("config_update_connection_history_label", { roomCode, label });
 }
+
+/**
+ * Get the user's display name
+ * @returns The configured peer name
+ */
+export async function configGetPeerName(): Promise<string> {
+  return invoke("config_get_peer_name");
+}
+
+/**
+ * Set the user's display name
+ * @param name New peer name (1-32 characters)
+ */
+export async function configSetPeerName(name: string): Promise<void> {
+  return invoke("config_set_peer_name", { name });
+}

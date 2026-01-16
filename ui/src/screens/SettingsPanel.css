@@ -167,3 +167,48 @@
 .theme-option--selected .theme-option__label {
   color: var(--color-text-primary);
 }
+
+/* Settings field (input with label) */
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.settings-field__label {
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.settings-field__input {
+  padding: var(--space-sm) var(--space-md);
+  background-color: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  font-family: inherit;
+  transition: border-color var(--transition-fast);
+}
+
+.settings-field__input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.settings-field__input--error {
+  border-color: var(--color-danger);
+}
+
+.settings-field__error {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-danger);
+}
+
+.settings-field__hint {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-tertiary);
+}

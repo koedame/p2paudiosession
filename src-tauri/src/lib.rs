@@ -66,6 +66,8 @@ pub fn run() {
             config::config_remove_connection_history,
             config::config_clear_connection_history,
             config::config_update_connection_history_label,
+            config::config_get_peer_name,
+            config::config_set_peer_name,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

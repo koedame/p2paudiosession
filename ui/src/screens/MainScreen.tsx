@@ -27,17 +27,19 @@ import {
   streamingSetPeerVolume,
   streamingSetMasterVolume,
   streamingSetPeerPan,
-  configLoad,
-  configSetServerUrl,
   configGetConnectionHistory,
   configAddConnectionHistory,
   configRemoveConnectionHistory,
+  configGetPeerName,
   type RoomInfo,
   type PeerInfo,
   type NetworkStats,
   type DetailedLatency,
   type ConnectionHistoryEntry,
 } from "../lib/tauri";
+
+// Get signaling server URL from environment variable
+const SIGNALING_SERVER_URL = import.meta.env.VITE_SIGNALING_SERVER || "ws://localhost:8080";
 import "./MainScreen.css";
 
 // Session state type
@@ -58,10 +60,10 @@ export interface MainScreenProps {
 
 export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps) {
   const { t, i18n } = useTranslation();
-  const [sessionState, setSessionState] = useState<SessionState>({ status: "idle" });
-  const [serverUrl, setServerUrl] = useState("ws://localhost:8080");
+  const [sessionState, setSessionState] = useState<SessionState>({ status: "connecting_server" });
   const [connectionId, setConnectionId] = useState<number | null>(null);
   const [peerName, setPeerName] = useState("User");
+  const hasAutoConnected = useRef(false);
   const [roomName, setRoomName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [currentInviteCode, setCurrentInviteCode] = useState("");
@@ -82,17 +84,15 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
     document.documentElement.lang = i18n.language;
   }, [i18n.language]);
 
-  // Load saved configuration on mount
+  // Load saved configuration and auto-connect on mount
   useEffect(() => {
-    const loadConfig = async () => {
+    const initializeAndConnect = async () => {
+      // Load peer name from settings
       try {
-        const config = await configLoad();
-        if (config.signaling_server_url) {
-          setServerUrl(config.signaling_server_url);
-        }
+        const savedPeerName = await configGetPeerName();
+        setPeerName(savedPeerName);
       } catch (e) {
-        // Config file might not exist yet, use defaults
-        console.log("No saved config found, using defaults");
+        console.log("Failed to load peer name, using default:", e);
       }
 
       // Load connection history
@@ -102,9 +102,46 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
       } catch (e) {
         console.log("Failed to load connection history:", e);
       }
+
+      // Auto-connect to signaling server (only once on initial mount)
+      if (!hasAutoConnected.current) {
+        hasAutoConnected.current = true;
+        await autoConnect();
+      }
     };
-    loadConfig();
+    initializeAndConnect();
+  }, []);
+
+  // Reload peer name when settings change
+  useEffect(() => {
+    if (settingsVersion === undefined || settingsVersion === 0) return;
+    const reloadPeerName = async () => {
+      try {
+        const savedPeerName = await configGetPeerName();
+        setPeerName(savedPeerName);
+      } catch (e) {
+        console.log("Failed to reload peer name:", e);
+      }
+    };
+    reloadPeerName();
   }, [settingsVersion]);
+
+  // Auto-connect to signaling server
+  const autoConnect = async () => {
+    setSessionState({ status: "connecting_server" });
+
+    try {
+      const connId = await signalingConnect(SIGNALING_SERVER_URL);
+      setConnectionId(connId);
+      const rooms = await signalingListRooms(connId);
+      setSessionState({ status: "server_connected", rooms });
+    } catch (e) {
+      setSessionState({
+        status: "error",
+        message: String(e),
+      });
+    }
+  };
 
   // Cleanup on unmount
   useEffect(() => {
@@ -169,33 +206,8 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
     return () => clearInterval(interval);
   }, [sessionState.status]);
 
-  // Handle server connection
-  const handleConnectServer = async () => {
-    setSessionState({ status: "connecting_server" });
-
-    try {
-      const connId = await signalingConnect(serverUrl);
-      setConnectionId(connId);
-
-      // Save the server URL to config
-      try {
-        await configSetServerUrl(serverUrl);
-      } catch (e) {
-        console.error("Failed to save server URL to config:", e);
-      }
-
-      const rooms = await signalingListRooms(connId);
-      setSessionState({ status: "server_connected", rooms });
-    } catch (e) {
-      setSessionState({
-        status: "error",
-        message: String(e),
-      });
-    }
-  };
-
-  // Handle disconnect from server
-  const handleDisconnectServer = async () => {
+  // Handle reconnect to server
+  const handleReconnect = async () => {
     if (connectionId !== null) {
       try {
         await signalingDisconnect(connectionId);
@@ -204,7 +216,7 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
       }
       setConnectionId(null);
     }
-    setSessionState({ status: "idle" });
+    await autoConnect();
   };
 
   // Refresh room list
@@ -402,54 +414,6 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
     }
   }, []);
 
-  // Render idle (disconnected from server) state
-  const renderIdleState = () => (
-    <>
-      <div className="main-status">
-        <ConnectionIndicator status="disconnected" size="lg" />
-      </div>
-
-      <div className="main-card">
-        <div className="main-card__server-form">
-          <label className="main-card__join-label">
-            {t("signaling.server.label", "Signaling Server")}
-          </label>
-          <div className="main-card__join-input-group">
-            <input
-              type="text"
-              className="main-card__join-input"
-              placeholder="ws://localhost:8080"
-              value={serverUrl}
-              onChange={(e) => setServerUrl(e.target.value)}
-            />
-            <button
-              className="main-card__join-btn"
-              onClick={handleConnectServer}
-              disabled={!serverUrl.trim()}
-            >
-              {t("signaling.connect.button", "Connect")}
-            </button>
-          </div>
-        </div>
-
-        <div className="main-card__divider" />
-
-        <div className="main-card__name-form">
-          <label className="main-card__join-label">
-            {t("signaling.peer.name", "Your Name")}
-          </label>
-          <input
-            type="text"
-            className="main-card__join-input"
-            placeholder="User"
-            value={peerName}
-            onChange={(e) => setPeerName(e.target.value)}
-          />
-        </div>
-      </div>
-    </>
-  );
-
   // Render server connected state (room list)
   const renderServerConnectedState = () => {
     if (sessionState.status !== "server_connected") return null;
@@ -558,12 +522,6 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
             </div>
           </div>
 
-          <button
-            className="main-card__disconnect-btn"
-            onClick={handleDisconnectServer}
-          >
-            {t("signaling.disconnect.button", "Disconnect")}
-          </button>
         </div>
       </>
     );
@@ -705,7 +663,7 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
 
         <button
           className="main-card__join-btn"
-          onClick={() => setSessionState({ status: "idle" })}
+          onClick={handleReconnect}
         >
           {t("common.button.retry")}
         </button>
@@ -737,7 +695,6 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
       </header>
 
       <main className="main-content">
-        {sessionState.status === "idle" && renderIdleState()}
         {sessionState.status === "server_connected" && renderServerConnectedState()}
         {isConnecting && renderConnectingState()}
         {sessionState.status === "connected" && renderConnectedState()}

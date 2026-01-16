@@ -5,7 +5,7 @@
  * For use inside the SidePanel component.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AudioDeviceInfo,
@@ -23,13 +23,20 @@ import {
   streamingSetOutputDevice,
   configLoad,
   configSave,
+  configGetPeerName,
+  configSetPeerName,
   type AppConfig,
 } from "../lib/tauri";
 import { DeviceSelector } from "../components/DeviceSelector";
 import { useTheme } from "../hooks/useTheme";
 import "./SettingsPanel.css";
 
-export function SettingsPanel() {
+export interface SettingsPanelProps {
+  /** Callback when settings are changed (to trigger reload in parent) */
+  onSettingsChange?: () => void;
+}
+
+export function SettingsPanel({ onSettingsChange }: SettingsPanelProps) {
   const { t } = useTranslation();
   const { theme, setTheme } = useTheme();
   const [inputDevices, setInputDevices] = useState<AudioDeviceInfo[]>([]);
@@ -39,6 +46,8 @@ export function SettingsPanel() {
   const [bufferSize, setBufferSize] = useState<number>(64);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [peerName, setPeerName] = useState<string>("User");
+  const [peerNameError, setPeerNameError] = useState<string | null>(null);
 
   // Buffer size options: 8, 16, 32, 64, 128, 256
   const bufferSizeOptions = [8, 16, 32, 64, 128, 256];
@@ -56,13 +65,16 @@ export function SettingsPanel() {
         setIsLoading(true);
         setError(null);
 
-        const [inputs, outputs, current, currentBufferSize] =
+        const [inputs, outputs, current, currentBufferSize, savedPeerName] =
           await Promise.all([
             audioListInputDevices(),
             audioListOutputDevices(),
             audioGetCurrentDevices(),
             audioGetBufferSize(),
+            configGetPeerName().catch(() => "User"),
           ]);
+
+        setPeerName(savedPeerName);
 
         setBufferSize(currentBufferSize);
         setInputDevices(inputs);
@@ -193,12 +205,63 @@ export function SettingsPanel() {
     }
   };
 
+  // Handle peer name change with debounce
+  const handlePeerNameChange = useCallback(async (newName: string) => {
+    setPeerName(newName);
+    setPeerNameError(null);
+
+    // Validate
+    const trimmed = newName.trim();
+    if (trimmed.length === 0) {
+      setPeerNameError(t("settings.profile.nameRequired", "Name is required"));
+      return;
+    }
+    if (trimmed.length > 32) {
+      setPeerNameError(t("settings.profile.nameTooLong", "Name must be 32 characters or less"));
+      return;
+    }
+
+    // Save to config
+    try {
+      await configSetPeerName(trimmed);
+      onSettingsChange?.();
+    } catch (err) {
+      setPeerNameError(err instanceof Error ? err.message : String(err));
+    }
+  }, [t, onSettingsChange]);
+
   // Calculate latency in ms for display
   const calculateLatencyMs = (samples: number) =>
     ((samples / 48000) * 1000).toFixed(2);
 
   return (
     <div className="settings-panel">
+      {/* Profile / User Name */}
+      <section className="settings-section">
+        <h3 className="settings-section__title">{t("settings.profile.title", "Profile")}</h3>
+
+        <div className="settings-field">
+          <label className="settings-field__label" htmlFor="peer-name">
+            {t("settings.profile.name", "Display Name")}
+          </label>
+          <input
+            id="peer-name"
+            type="text"
+            className={`settings-field__input ${peerNameError ? "settings-field__input--error" : ""}`}
+            value={peerName}
+            onChange={(e) => handlePeerNameChange(e.target.value)}
+            placeholder="User"
+            maxLength={32}
+          />
+          {peerNameError && (
+            <p className="settings-field__error">{peerNameError}</p>
+          )}
+          <p className="settings-field__hint">
+            {t("settings.profile.nameHint", "This name will be shown to other participants")}
+          </p>
+        </div>
+      </section>
+
       {/* Audio Devices */}
       <section className="settings-section">
         <h3 className="settings-section__title">{t("settings.audio.devices")}</h3>

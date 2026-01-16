@@ -107,6 +107,9 @@ impl AudioPreset {
     }
 }
 
+/// Default peer name
+const DEFAULT_PEER_NAME: &str = "User";
+
 /// Application configuration
 ///
 /// Contains all persistent settings for the jamjam application.
@@ -135,6 +138,14 @@ pub struct AppConfig {
     /// Connection history (most recent first)
     #[serde(default)]
     pub connection_history: Vec<ConnectionHistoryEntry>,
+
+    /// User's display name for sessions
+    #[serde(default = "default_peer_name")]
+    pub peer_name: String,
+}
+
+fn default_peer_name() -> String {
+    DEFAULT_PEER_NAME.to_string()
 }
 
 fn default_buffer_size() -> u32 {
@@ -150,6 +161,7 @@ impl Default for AppConfig {
             signaling_server_url: None,
             preset: AudioPreset::default(),
             connection_history: Vec::new(),
+            peer_name: DEFAULT_PEER_NAME.to_string(),
         }
     }
 }
@@ -471,6 +483,40 @@ pub fn config_update_connection_history_label(
     } else {
         Err(format!("Room code not found in history: {}", room_code))
     }
+}
+
+// =============================================================================
+// Peer Name Commands
+// =============================================================================
+
+/// Get the user's display name
+///
+/// Returns the configured peer name for use in sessions.
+#[tauri::command]
+pub fn config_get_peer_name(state: tauri::State<'_, ConfigState>) -> Result<String, String> {
+    let config = state.get()?;
+    Ok(config.peer_name)
+}
+
+/// Set the user's display name
+///
+/// Updates and persists the peer name used in sessions.
+#[tauri::command]
+pub fn config_set_peer_name(
+    name: String,
+    state: tauri::State<'_, ConfigState>,
+) -> Result<(), String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("Peer name cannot be empty".to_string());
+    }
+    if trimmed.len() > 32 {
+        return Err("Peer name cannot exceed 32 characters".to_string());
+    }
+
+    let mut config = state.get()?;
+    config.peer_name = trimmed.to_string();
+    state.update(config)
 }
 
 #[cfg(test)]
