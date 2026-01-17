@@ -261,13 +261,28 @@ pub async fn signaling_send_chat(
     let timestamp = current_timestamp();
 
     conn.send(SignalingMessage::ChatMessage {
-        sender_id,
-        sender_name,
-        content,
+        sender_id: sender_id.clone(),
+        sender_name: sender_name.clone(),
+        content: content.clone(),
         timestamp,
     })
     .await
     .map_err(|e| e.to_string())?;
+
+    drop(connections);
+
+    // Add own message to chat_messages immediately for display
+    let mut room_state_guard = state.room_state.lock().await;
+    if let Some(ref mut rs) = *room_state_guard {
+        rs.chat_messages.push(ChatMessage {
+            id: uuid::Uuid::new_v4().to_string(),
+            sender_id,
+            sender_name,
+            content,
+            timestamp,
+            is_system: false,
+        });
+    }
 
     Ok(())
 }

@@ -198,6 +198,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(SignalingMessage::PeerLeft { peer_id }) => {
                     info!("Peer left: {}", peer_id);
                 }
+                Some(SignalingMessage::ChatMessage {
+                    sender_id,
+                    sender_name,
+                    content,
+                    ..
+                }) => {
+                    // Echo back the chat message
+                    info!("Chat from {}: {}", sender_name, content);
+                    let echo_content = format!("🔊 {}", content);
+                    let mut conn_guard = signaling_conn_clone.lock().await;
+                    if let Some(conn) = conn_guard.as_mut() {
+                        let timestamp = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as u64;
+                        if let Err(e) = conn
+                            .send(SignalingMessage::ChatMessage {
+                                sender_id: sender_id.clone(),
+                                sender_name: "Echo Bot".to_string(),
+                                content: echo_content,
+                                timestamp,
+                            })
+                            .await
+                        {
+                            warn!("Failed to send echo chat: {}", e);
+                        }
+                    }
+                }
                 Some(SignalingMessage::Error { message }) => {
                     warn!("Signaling error: {}", message);
                 }

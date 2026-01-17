@@ -77,6 +77,12 @@
 
 ### 2026-01-17
 
+- [x] **チャット機能の改善**
+  - Echo サーバーにチャット返信機能を追加（🔊 プレフィックス付きでオウム返し）
+  - GUI チャット送信時に自分のメッセージを即座に表示するよう修正
+  - `src/bin/echo_server.rs`, `src-tauri/src/signaling.rs` を修正
+  - テスト環境にデプロイ完了
+
 - [x] **チャット機能のサーバー側修正**
   - TLS版シグナリングサーバーに ChatMessage 処理を追加
   - `src/bin/signaling_server.rs` の process_message 関数を修正
