@@ -104,26 +104,23 @@ export function MixerChannel({
   // Default colors by type
   const channelColor = color || (type === "input" ? "#ff6b35" : type === "master" ? "#7c5cff" : "#4ecdc4");
 
-  // dB scale values for fader (like DAW mixers)
-  const dbScaleValues = [0, 3, 6, 9, 12, 15, 18, 21, 24, 30, 35, 40, 45, 50, 60];
-
   return (
     <div className={`mixer-channel mixer-channel--${type}`}>
-      {/* Pan Knob */}
+      {/* Pan Slider */}
       <div className="mixer-channel__pan">
-        <div className="mixer-channel__knob-container" onDoubleClick={handlePanDoubleClick}>
+        <div className="mixer-channel__pan-label">
+          {pan < -10 ? "L" : pan > 10 ? "R" : "C"}
+          {Math.abs(pan) > 10 && Math.abs(pan) < 100 ? Math.abs(Math.round(pan / 10)) : ""}
+        </div>
+        <div className="mixer-channel__pan-slider-container" onDoubleClick={handlePanDoubleClick}>
           <input
             type="range"
             min="-100"
             max="100"
             value={pan}
             onChange={handlePanChange}
-            className="mixer-channel__knob"
+            className="mixer-channel__pan-slider"
             aria-label={`${name} pan`}
-          />
-          <div
-            className="mixer-channel__knob-indicator"
-            style={{ transform: `rotate(${pan * 1.35}deg)` }}
           />
         </div>
       </div>
@@ -136,40 +133,20 @@ export function MixerChannel({
 
       {/* Meter and Fader Section */}
       <div className="mixer-channel__controls">
-        {/* Fader with tick marks and scale */}
-        <div className="mixer-channel__fader-section">
-          {/* Tick marks (left side) */}
-          <div className="mixer-channel__fader-ticks">
-            {dbScaleValues.map((db, i) => (
-              <div
-                key={db}
-                className={`mixer-channel__tick ${i % 3 === 0 ? "mixer-channel__tick--major" : ""}`}
-              />
-            ))}
-          </div>
-
-          {/* Fader */}
-          <div className="mixer-channel__fader-container" onDoubleClick={handleFaderDoubleClick}>
-            <div className="mixer-channel__fader-track" />
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={volume}
-              onChange={handleVolumeChange}
-              onMouseDown={() => setIsDraggingFader(true)}
-              onMouseUp={() => setIsDraggingFader(false)}
-              className={`mixer-channel__fader ${isDraggingFader ? "mixer-channel__fader--dragging" : ""}`}
-              aria-label={`${name} volume`}
-            />
-          </div>
-
-          {/* dB Scale (right side) */}
-          <div className="mixer-channel__db-scale">
-            {dbScaleValues.map((db) => (
-              <span key={db}>{db}</span>
-            ))}
-          </div>
+        {/* Fader */}
+        <div className="mixer-channel__fader-container" onDoubleClick={handleFaderDoubleClick}>
+          <div className="mixer-channel__fader-track" />
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={volume}
+            onChange={handleVolumeChange}
+            onMouseDown={() => setIsDraggingFader(true)}
+            onMouseUp={() => setIsDraggingFader(false)}
+            className={`mixer-channel__fader ${isDraggingFader ? "mixer-channel__fader--dragging" : ""}`}
+            aria-label={`${name} volume`}
+          />
         </div>
 
         {/* Level Meter */}
