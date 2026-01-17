@@ -524,6 +524,27 @@ async fn process_message(
             Some(SignalingMessage::RoomList { rooms: room_list })
         }
 
+        SignalingMessage::ChatMessage {
+            sender_id,
+            sender_name,
+            content,
+            timestamp,
+        } => {
+            // Broadcast chat message to all peers in the room
+            if let Some(room_id) = current_room.as_ref() {
+                let rooms_guard = rooms.read().await;
+                if let Some(room) = rooms_guard.get(room_id) {
+                    let _ = room.broadcast_tx.send(SignalingMessage::ChatMessage {
+                        sender_id,
+                        sender_name,
+                        content,
+                        timestamp,
+                    });
+                }
+            }
+            None
+        }
+
         // Server->Client messages are ignored if received
         _ => None,
     }
