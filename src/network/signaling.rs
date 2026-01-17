@@ -179,6 +179,15 @@ pub enum SignalingMessage {
     Error {
         message: String,
     },
+
+    // Chat messages
+    /// Send a chat message to the room
+    ChatMessage {
+        sender_id: String,
+        sender_name: String,
+        content: String,
+        timestamp: u64,
+    },
 }
 
 /// Room state on the server
@@ -560,6 +569,27 @@ async fn process_message(
                 .collect();
 
             Some(SignalingMessage::RoomList { rooms: room_list })
+        }
+
+        SignalingMessage::ChatMessage {
+            sender_id,
+            sender_name,
+            content,
+            timestamp,
+        } => {
+            // Broadcast chat message to all peers in the room
+            if let Some(room_id) = current_room.as_ref() {
+                let rooms_guard = rooms.read().await;
+                if let Some(room) = rooms_guard.get(room_id) {
+                    let _ = room.broadcast_tx.send(SignalingMessage::ChatMessage {
+                        sender_id,
+                        sender_name,
+                        content,
+                        timestamp,
+                    });
+                }
+            }
+            None
         }
 
         // These are server->client messages, ignore if received

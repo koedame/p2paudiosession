@@ -10,6 +10,7 @@ import { ConnectionIndicator } from "../components/ConnectionIndicator";
 import { SessionStats } from "../components/SessionStats";
 import { ConnectionHistory } from "../components/ConnectionHistory";
 import { MixerConsole, type Participant } from "../components/Mixer";
+import { ChatPanel } from "../components/Chat";
 import { formatErrorForDisplay } from "../lib/errorMessages";
 import {
   signalingConnect,
@@ -78,6 +79,8 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
   const [inputLevel, setInputLevel] = useState(0);
   const [outputLevel, setOutputLevel] = useState(0);
   const [connectionHistory, setConnectionHistory] = useState<ConnectionHistoryEntry[]>([]);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [myPeerId, setMyPeerId] = useState<string | null>(null);
 
   // Update html lang attribute when language changes
   useEffect(() => {
@@ -247,6 +250,7 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
         peerName
       );
       setCurrentInviteCode(result.invite_code);
+      setMyPeerId(result.peer_id);
       setSessionState({
         status: "connected",
         roomCode: result.room_id,
@@ -275,6 +279,7 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
     try {
       const result = await signalingJoinRoom(connectionId, roomId, peerName);
       setCurrentInviteCode(result.invite_code || "");
+      setMyPeerId(result.peer_id);
       setSessionState({
         status: "connected",
         roomCode: result.room_id,
@@ -341,6 +346,8 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
       await signalingLeaveRoom(connectionId);
       setCurrentInviteCode("");
       setInviteCode("");
+      setMyPeerId(null);
+      setIsChatOpen(false);
       const rooms = await signalingListRooms(connectionId);
       setSessionState({ status: "server_connected", rooms });
     } catch (e) {
@@ -682,16 +689,29 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
         <div className="main-header__logo">
           <span className="main-header__logo-text">jamjam</span>
         </div>
-        <button
-          className="main-header__settings-btn"
-          onClick={handleSettingsClick}
-          aria-label={t("settings.title")}
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
-        </button>
+        <div className="main-header__actions">
+          {sessionState.status === "connected" && (
+            <button
+              className="main-header__chat-btn"
+              onClick={() => setIsChatOpen(true)}
+              aria-label={t("chat.title", "Chat")}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+            </button>
+          )}
+          <button
+            className="main-header__settings-btn"
+            onClick={handleSettingsClick}
+            aria-label={t("settings.title")}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       <main className="main-content">
@@ -700,6 +720,14 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
         {sessionState.status === "connected" && renderConnectedState()}
         {sessionState.status === "error" && renderErrorState()}
       </main>
+
+      {/* Chat Panel */}
+      <ChatPanel
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        connId={connectionId}
+        myPeerId={myPeerId}
+      />
     </div>
   );
 }

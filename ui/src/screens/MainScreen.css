@@ -30,6 +30,13 @@
   color: var(--color-text-primary);
 }
 
+.main-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.main-header__chat-btn,
 .main-header__settings-btn {
   padding: var(--space-sm);
   border: none;
@@ -37,11 +44,14 @@
   background-color: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: background-color var(--duration-fast) var(--ease-out);
+  transition: background-color var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
 }
 
+.main-header__chat-btn:hover,
 .main-header__settings-btn:hover {
   background-color: var(--color-bg-hover);
+  color: var(--color-text-primary);
 }
 
 /* Main content */

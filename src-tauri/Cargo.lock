@@ -2027,6 +2027,7 @@ dependencies = [
  "tauri-plugin-shell",
  "tokio",
  "toml 0.8.2",
+ "uuid",
  "windows 0.58.0",
 ]
 

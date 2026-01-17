@@ -55,12 +55,12 @@ export function MixerChannel({
   volume,
   pan = 0,
   isMuted,
-  isSoloed = false,
+  isSoloed: _isSoloed = false,
   color,
   onVolumeChange,
   onPanChange,
   onMuteToggle,
-  onSoloToggle,
+  onSoloToggle: _onSoloToggle,
 }: MixerChannelProps) {
   const [isDraggingFader, setIsDraggingFader] = useState(false);
 
@@ -83,10 +83,6 @@ export function MixerChannel({
   const handleMuteClick = useCallback(() => {
     onMuteToggle?.(id);
   }, [id, onMuteToggle]);
-
-  const handleSoloClick = useCallback(() => {
-    onSoloToggle?.(id);
-  }, [id, onSoloToggle]);
 
   // Double-click to reset fader to 0dB (volume = 80)
   const handleFaderDoubleClick = useCallback(() => {
