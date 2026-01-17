@@ -19,7 +19,9 @@
   template:
     src: env.j2
     dest: "{{ jamjam_app_dir }}/.env"
-    mode: '0600'
+    owner: "{{ ansible_user }}"
+    group: docker
+    mode: '0640'
   notify: Restart jamjam services
 
 # Transfer locally-built Docker images

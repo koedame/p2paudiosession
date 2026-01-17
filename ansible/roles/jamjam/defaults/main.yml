@@ -1,11 +1,16 @@
 ---
 # Default values for jamjam role
+#
+# NOTE: Environment-specific values MUST be set in group_vars/<environment>.yml:
+#   - jamjam_rust_log
+#   - jamjam_echo_delay_ms
+#   - jamjam_echo_public_addr
+#   - jamjam_cloudflare_tunnel_token
+
 jamjam_app_dir: /opt/jamjam
 jamjam_user: jamjam
 jamjam_group: jamjam
 jamjam_image_tag: latest
-jamjam_rust_log: info
-jamjam_echo_delay_ms: 3000
-jamjam_echo_public_addr: "{{ ansible_facts['default_ipv4']['address'] }}:5000"
-jamjam_cloudflare_tunnel_token: ""
+
+# R2 log upload (must be explicitly enabled per environment)
 r2_log_upload_enabled: false
