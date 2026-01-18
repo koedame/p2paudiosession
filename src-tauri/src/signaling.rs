@@ -394,6 +394,18 @@ pub async fn signaling_poll_events(
                         content,
                         timestamp,
                     } => {
+                        // Skip own messages (already added in signaling_send_chat)
+                        let mut room_state = state.room_state.lock().await;
+                        let is_own_message = room_state
+                            .as_ref()
+                            .map(|rs| rs.peer_id == sender_id)
+                            .unwrap_or(false);
+
+                        if is_own_message {
+                            drop(room_state);
+                            continue;
+                        }
+
                         let chat_msg = ChatMessage {
                             id: Uuid::new_v4().to_string(),
                             sender_id: sender_id.clone(),
@@ -404,7 +416,6 @@ pub async fn signaling_poll_events(
                         };
 
                         // Store in room state
-                        let mut room_state = state.room_state.lock().await;
                         if let Some(ref mut rs) = *room_state {
                             rs.chat_messages.push(chat_msg.clone());
                         }
