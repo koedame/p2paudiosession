@@ -12,11 +12,18 @@ Deploy jamjam services (signaling-server, echo-server, cloudflared) to the test 
 
 ### 1. Build Docker Images
 
-Build both images locally:
+Build both images locally for AMD64 platform (test server is x86_64):
 
 ```bash
-docker build -f Dockerfile.signaling -t jamjam-signaling:latest .
-docker build -f Dockerfile.echo -t jamjam-echo:latest .
+docker build --platform linux/amd64 -f Dockerfile.signaling -t jamjam-signaling:latest .
+docker build --platform linux/amd64 -f Dockerfile.echo -t jamjam-echo:latest .
+```
+
+**Note**: The `--platform linux/amd64` flag is required when building on Apple Silicon (ARM64) Mac for deployment to x86_64 servers. If you encounter platform mismatch errors on the server, rebuild with `--no-cache`:
+
+```bash
+docker build --platform linux/amd64 --no-cache -f Dockerfile.signaling -t jamjam-signaling:latest .
+docker build --platform linux/amd64 --no-cache -f Dockerfile.echo -t jamjam-echo:latest .
 ```
 
 ### 2. Export Images
@@ -24,10 +31,12 @@ docker build -f Dockerfile.echo -t jamjam-echo:latest .
 Save and compress the images for transfer:
 
 ```bash
+rm -f /tmp/jamjam-images.tar.gz
 docker save jamjam-signaling:latest jamjam-echo:latest | gzip > /tmp/jamjam-images.tar.gz
+ls -lh /tmp/jamjam-images.tar.gz
 ```
 
-Report the file size to the user.
+Report the file size to the user (typically ~35MB).
 
 ### 3. Deploy via Ansible
 
@@ -50,7 +59,7 @@ This will:
 Remove the temporary image archive:
 
 ```bash
-rm /tmp/jamjam-images.tar.gz
+rm -f /tmp/jamjam-images.tar.gz
 ```
 
 ### 5. Verify Server Status
@@ -103,17 +112,22 @@ If the Echo Server room appears, the deployment is successful.
 
 If deployment fails:
 
-1. Check SSH connectivity:
+1. **Platform mismatch error** ("The requested image's platform (linux/arm64) does not match the detected host platform (linux/amd64)"):
+   - This occurs when building on Apple Silicon without specifying the target platform
+   - Solution: Rebuild images with `--platform linux/amd64 --no-cache` flags
+   - See Step 1 for the correct build commands
+
+2. Check SSH connectivity:
    ```bash
    ssh -i PrivateDocs/jamjam_vps ubuntu@160.16.61.28 "echo OK"
    ```
 
-2. Check Docker images on server:
+3. Check Docker images on server:
    ```bash
    ssh -i PrivateDocs/jamjam_vps ubuntu@160.16.61.28 "docker images | grep jamjam"
    ```
 
-3. Check container logs:
+4. Check container logs:
    ```bash
    ssh -i PrivateDocs/jamjam_vps ubuntu@160.16.61.28 "cd /opt/jamjam && docker compose logs --tail=50"
    ```

@@ -19,6 +19,7 @@ import {
   signalingJoinRoom,
   signalingLeaveRoom,
   signalingCreateRoom,
+  signalingPollEvents,
   streamingStart,
   streamingStop,
   streamingStatus,
@@ -208,6 +209,47 @@ export function MainScreen({ onSettingsClick, settingsVersion }: MainScreenProps
 
     return () => clearInterval(interval);
   }, [sessionState.status]);
+
+  // Poll signaling events when connected (for peer join/leave and chat)
+  useEffect(() => {
+    if (sessionState.status !== "connected" || connectionId === null) {
+      return;
+    }
+
+    const pollEvents = async () => {
+      try {
+        const events = await signalingPollEvents(connectionId);
+        for (const event of events) {
+          if (event.type === "PeerJoined") {
+            setSessionState((prev) => {
+              if (prev.status !== "connected") return prev;
+              // Avoid duplicate
+              if (prev.participants.includes(event.peer.name)) return prev;
+              return {
+                ...prev,
+                participants: [...prev.participants, event.peer.name],
+              };
+            });
+          } else if (event.type === "PeerLeft") {
+            setSessionState((prev) => {
+              if (prev.status !== "connected") return prev;
+              // Note: we don't have peer name, but can filter by peer_id if needed
+              // For now, we'll rely on the participant list refresh
+              return prev;
+            });
+          }
+          // ChatMessageReceived events are handled by ChatPanel's own polling
+        }
+      } catch (e) {
+        console.error("Failed to poll signaling events:", e);
+      }
+    };
+
+    // Poll every 500ms
+    const interval = setInterval(pollEvents, 500);
+
+    return () => clearInterval(interval);
+  }, [sessionState.status, connectionId]);
 
   // Handle reconnect to server
   const handleReconnect = async () => {

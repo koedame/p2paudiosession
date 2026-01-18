@@ -158,6 +158,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Connect to signaling server if URL provided
     let signaling_conn: Arc<Mutex<Option<SignalingConnection>>> = Arc::new(Mutex::new(None));
+    let mut my_peer_id: Option<String> = None;
     if let Some(signaling_url) = &args.signaling_url {
         match setup_signaling(
             signaling_url,
@@ -167,8 +168,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await
         {
-            Ok(conn) => {
+            Ok((conn, peer_id)) => {
                 info!("Connected to signaling server: {}", signaling_url);
+                my_peer_id = Some(peer_id);
                 *signaling_conn.lock().await = Some(conn);
             }
             Err(e) => {
@@ -180,6 +182,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Spawn signaling event handler
     let signaling_conn_clone = signaling_conn.clone();
+    let echo_bot_peer_id = my_peer_id.clone().unwrap_or_default();
     let _signaling_handle = tokio::spawn(async move {
         loop {
             let msg = {
@@ -190,41 +193,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     None
                 }
             };
+            // Note: conn_guard is dropped here, so we can safely re-acquire the lock below
 
+            // Check if we need to send an echo response
+            // Skip our own messages to avoid infinite loop
+            let echo_response: Option<String> = match &msg {
+                Some(SignalingMessage::ChatMessage {
+                    sender_name,
+                    content,
+                    ..
+                }) if sender_name != "Echo Bot" => {
+                    info!("Chat from {}: {}", sender_name, content);
+                    Some(format!("🔊 {}", content))
+                }
+                _ => None,
+            };
+
+            // Send echo response if needed (lock is not held here)
+            if let Some(echo_content) = echo_response {
+                let mut conn_guard = signaling_conn_clone.lock().await;
+                if let Some(conn) = conn_guard.as_mut() {
+                    let timestamp = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64;
+                    if let Err(e) = conn
+                        .send(SignalingMessage::ChatMessage {
+                            sender_id: echo_bot_peer_id.clone(),
+                            sender_name: "Echo Bot".to_string(),
+                            content: echo_content,
+                            timestamp,
+                        })
+                        .await
+                    {
+                        warn!("Failed to send echo chat: {}", e);
+                    }
+                }
+            }
+
+            // Handle other message types
             match msg {
                 Some(SignalingMessage::PeerJoined { peer }) => {
                     info!("Peer joined: {} ({})", peer.name, peer.id);
                 }
                 Some(SignalingMessage::PeerLeft { peer_id }) => {
                     info!("Peer left: {}", peer_id);
-                }
-                Some(SignalingMessage::ChatMessage {
-                    sender_id,
-                    sender_name,
-                    content,
-                    ..
-                }) => {
-                    // Echo back the chat message
-                    info!("Chat from {}: {}", sender_name, content);
-                    let echo_content = format!("🔊 {}", content);
-                    let mut conn_guard = signaling_conn_clone.lock().await;
-                    if let Some(conn) = conn_guard.as_mut() {
-                        let timestamp = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_millis() as u64;
-                        if let Err(e) = conn
-                            .send(SignalingMessage::ChatMessage {
-                                sender_id: sender_id.clone(),
-                                sender_name: "Echo Bot".to_string(),
-                                content: echo_content,
-                                timestamp,
-                            })
-                            .await
-                        {
-                            warn!("Failed to send echo chat: {}", e);
-                        }
-                    }
                 }
                 Some(SignalingMessage::Error { message }) => {
                     warn!("Signaling error: {}", message);
@@ -366,12 +379,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Setup signaling connection and create room
+/// Returns (connection, peer_id)
 async fn setup_signaling(
     signaling_url: &str,
     room_name: &str,
     delay_ms: u64,
     udp_addr: SocketAddr,
-) -> Result<SignalingConnection, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(SignalingConnection, String), Box<dyn std::error::Error + Send + Sync>> {
     let client = SignalingClient::new(signaling_url);
     let mut conn = client.connect().await?;
 
@@ -408,7 +422,7 @@ async fn setup_signaling(
             .await?;
 
             info!("Advertised UDP address: {}", udp_addr);
-            Ok(conn)
+            Ok((conn, peer_id.to_string()))
         }
         SignalingMessage::Error { message } => {
             Err(format!("Failed to create room: {}", message).into())

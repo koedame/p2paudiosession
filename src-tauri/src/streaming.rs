@@ -35,10 +35,10 @@ fn set_current_thread_realtime_priority() {
 
     #[repr(C)]
     struct ThreadTimeConstraintPolicy {
-        period: u32,        // Interval between processing (in Mach absolute time units)
-        computation: u32,   // Time needed for computation
-        constraint: u32,    // Maximum time before deadline
-        preemptible: i32,   // Can be preempted?
+        period: u32,      // Interval between processing (in Mach absolute time units)
+        computation: u32, // Time needed for computation
+        constraint: u32,  // Maximum time before deadline
+        preemptible: i32, // Can be preempted?
     }
 
     const THREAD_TIME_CONSTRAINT_POLICY: u32 = 2;
@@ -67,23 +67,22 @@ fn set_current_thread_realtime_priority() {
         mach_timebase_info(&mut timebase);
 
         // Convert nanoseconds to Mach absolute time units
-        let ns_to_abs = |ns: u64| -> u32 {
-            ((ns * timebase.denom as u64) / timebase.numer as u64) as u32
-        };
+        let ns_to_abs =
+            |ns: u64| -> u32 { ((ns * timebase.denom as u64) / timebase.numer as u64) as u32 };
 
         // Audio timing constraints (for 48kHz, ~1ms period with small buffer)
         // period: how often the thread runs (e.g., every 1ms for audio callback)
         // computation: how much CPU time it needs per period
         // constraint: deadline (must complete within this time)
-        let period_ns = 1_000_000;       // 1ms period (audio callback interval)
-        let computation_ns = 500_000;    // 0.5ms computation time
-        let constraint_ns = 1_000_000;   // 1ms deadline
+        let period_ns = 1_000_000; // 1ms period (audio callback interval)
+        let computation_ns = 500_000; // 0.5ms computation time
+        let constraint_ns = 1_000_000; // 1ms deadline
 
         let policy = ThreadTimeConstraintPolicy {
             period: ns_to_abs(period_ns),
             computation: ns_to_abs(computation_ns),
             constraint: ns_to_abs(constraint_ns),
-            preemptible: 0,  // Don't preempt during computation
+            preemptible: 0, // Don't preempt during computation
         };
 
         let thread = mach_thread_self();
@@ -99,7 +98,10 @@ fn set_current_thread_realtime_priority() {
         } else {
             // Fall back to nice value
             libc::setpriority(libc::PRIO_PROCESS, 0, -20);
-            println!("Audio thread: using nice -20 (TIME_CONSTRAINT failed: {})", result);
+            println!(
+                "Audio thread: using nice -20 (TIME_CONSTRAINT failed: {})",
+                result
+            );
         }
     }
 }
@@ -116,7 +118,10 @@ fn set_current_thread_realtime_priority() {
             libc::setpriority(libc::PRIO_PROCESS, 0, -20);
             println!("Audio thread: using nice -20 (SCHED_FIFO requires rtprio config)");
         } else {
-            println!("Audio thread: real-time priority enabled (SCHED_FIFO {})", REALTIME_PRIORITY);
+            println!(
+                "Audio thread: real-time priority enabled (SCHED_FIFO {})",
+                REALTIME_PRIORITY
+            );
         }
     }
 }
@@ -602,9 +607,7 @@ pub async fn streaming_set_mute(
 
 /// Get mute state
 #[tauri::command]
-pub async fn streaming_get_mute(
-    state: tauri::State<'_, StreamingState>,
-) -> Result<bool, String> {
+pub async fn streaming_get_mute(state: tauri::State<'_, StreamingState>) -> Result<bool, String> {
     Ok(state.is_muted.load(Ordering::SeqCst))
 }
 
@@ -893,7 +896,10 @@ async fn run_audio_streaming(
                 }
             }
             // Update shared input level from capture callback
-            input_level.store(input_level_for_capture.load(Ordering::SeqCst), Ordering::SeqCst);
+            input_level.store(
+                input_level_for_capture.load(Ordering::SeqCst),
+                Ordering::SeqCst,
+            );
             // Update underrun count from playback engine
             underrun_count.store(playback_engine.underrun_count(), Ordering::Relaxed);
         }

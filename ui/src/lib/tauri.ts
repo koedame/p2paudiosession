@@ -39,6 +39,27 @@ export interface JoinResult {
 }
 
 /**
+ * Chat message from signaling
+ */
+export interface ChatMessage {
+  id: string;
+  sender_id: string;
+  sender_name: string;
+  content: string;
+  timestamp: number;
+  is_system: boolean;
+}
+
+/**
+ * Signaling event types
+ */
+export type SignalingEvent =
+  | { type: "PeerJoined"; peer: PeerInfo }
+  | { type: "PeerLeft"; peer_id: string }
+  | { type: "PeerUpdated"; peer: PeerInfo }
+  | { type: "ChatMessageReceived"; message: ChatMessage };
+
+/**
  * Connect to a signaling server
  * @param url WebSocket URL of the signaling server (e.g., ws://localhost:8080)
  * @returns Connection ID for subsequent operations
@@ -100,6 +121,17 @@ export async function signalingCreateRoom(
   peerName: string
 ): Promise<JoinResult> {
   return invoke("signaling_create_room", { connId, roomName, peerName });
+}
+
+/**
+ * Poll for signaling events (peer join/leave, chat messages)
+ * @param connId Connection ID from signalingConnect
+ * @returns Array of signaling events
+ */
+export async function signalingPollEvents(
+  connId: number
+): Promise<SignalingEvent[]> {
+  return invoke("signaling_poll_events", { connId });
 }
 
 // ============================================================================

@@ -1,16 +1,18 @@
 //! jamjam - Low-latency P2P audio communication for musicians
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tracing::{info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 
 use jamjam::audio::{list_input_devices, list_output_devices, AudioConfig, AudioEngine, DeviceId};
 use jamjam::network::{
     candidates_to_addrs, gather_candidates, Connection, ConnectionStats, LatencyBreakdown,
-    LocalLatencyInfo, PeerLatencyInfo, SignalingClient, SignalingMessage,
+    LocalLatencyInfo, PeerLatencyInfo, SignalingClient, SignalingConnection, SignalingMessage,
 };
 
 #[derive(Parser)]
@@ -115,6 +117,18 @@ enum Commands {
         /// Output device name (use 'devices list' to see available devices)
         #[arg(long)]
         output_device: Option<String>,
+
+        /// Send a single message and exit (non-interactive mode)
+        #[arg(short = 'm', long)]
+        message: Option<String>,
+
+        /// Timeout in seconds for non-interactive mode (default: 5)
+        #[arg(long, default_value = "5")]
+        timeout: u64,
+
+        /// Skip audio (chat only mode)
+        #[arg(long)]
+        chat_only: bool,
     },
 }
 
@@ -455,6 +469,55 @@ async fn run_join(
     Ok(())
 }
 
+/// Process signaling events and print them to stdout
+fn handle_signaling_event(msg: &SignalingMessage) {
+    match msg {
+        SignalingMessage::PeerJoined { peer } => {
+            println!("\n📥 {} joined the room", peer.name);
+            print!("chat> ");
+            let _ = std::io::Write::flush(&mut std::io::stdout());
+        }
+        SignalingMessage::PeerLeft { peer_id } => {
+            println!("\n📤 Peer {} left the room", peer_id);
+            print!("chat> ");
+            let _ = std::io::Write::flush(&mut std::io::stdout());
+        }
+        SignalingMessage::ChatMessage {
+            sender_name,
+            content,
+            ..
+        } => {
+            println!("\n💬 {}: {}", sender_name, content);
+            print!("chat> ");
+            let _ = std::io::Write::flush(&mut std::io::stdout());
+        }
+        _ => {}
+    }
+}
+
+/// Send a chat message via signaling connection
+async fn send_chat_message(
+    conn: &mut SignalingConnection,
+    peer_id: &str,
+    peer_name: &str,
+    content: &str,
+) -> Result<()> {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+
+    conn.send(SignalingMessage::ChatMessage {
+        sender_id: peer_id.to_string(),
+        sender_name: peer_name.to_string(),
+        content: content.to_string(),
+        timestamp,
+    })
+    .await?;
+
+    Ok(())
+}
+
 async fn run_rooms(server: String) -> Result<()> {
     info!("Connecting to signaling server: {}", server);
 
@@ -495,6 +558,7 @@ async fn run_rooms(server: String) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_join_room(
     server: String,
     room_id: String,
@@ -503,6 +567,9 @@ async fn run_join_room(
     frame_size: u32,
     input_device: Option<String>,
     output_device: Option<String>,
+    message: Option<String>,
+    timeout_secs: u64,
+    chat_only: bool,
 ) -> Result<()> {
     let config = AudioConfig {
         sample_rate,
@@ -524,7 +591,7 @@ async fn run_join_room(
     })
     .await?;
 
-    let peers = match conn.recv().await? {
+    let (my_peer_id, peers) = match conn.recv().await? {
         SignalingMessage::RoomJoined {
             room_id: joined_room_id,
             peer_id,
@@ -540,7 +607,7 @@ async fn run_join_room(
                     peer.name, peer.id, peer.public_addr
                 );
             }
-            peers
+            (peer_id, peers)
         }
         SignalingMessage::Error { message } => {
             anyhow::bail!("Failed to join room: {}", message);
@@ -552,9 +619,14 @@ async fn run_join_room(
 
     // Find a peer with address(es) to connect to
     // Prefer peers with candidates, fall back to legacy public_addr
-    let target_peer = peers
-        .iter()
-        .find(|p| !p.candidates.is_empty() || p.public_addr.is_some());
+    // Skip peer search if chat_only mode is enabled
+    let target_peer = if chat_only {
+        None
+    } else {
+        peers
+            .iter()
+            .find(|p| !p.candidates.is_empty() || p.public_addr.is_some())
+    };
 
     if let Some(peer) = target_peer {
         let peer_display_name = peer.name.clone();
@@ -628,7 +700,10 @@ async fn run_join_room(
 
         println!("\nConnected to peer. Session active.");
         println!("Audio config: {:?}", config);
+        println!("\n💬 Chat enabled. Type a message and press Enter to send.");
         println!("Press Ctrl+C to stop.\n");
+        print!("chat> ");
+        let _ = std::io::Write::flush(&mut std::io::stdout());
 
         let connection_arc = Arc::new(tokio::sync::Mutex::new(connection));
         let connection_for_send = connection_arc.clone();
@@ -651,7 +726,47 @@ async fn run_join_room(
             }
         });
 
-        // Process received audio on main thread using select
+        // Wrap signaling connection in Arc<Mutex> for sharing
+        let signaling_conn_arc = Arc::new(tokio::sync::Mutex::new(conn));
+        let signaling_for_recv = signaling_conn_arc.clone();
+
+        // Channel for signaling events
+        let (tx_signaling, mut rx_signaling) = tokio::sync::mpsc::channel::<SignalingMessage>(32);
+
+        // Spawn task to poll signaling events
+        let signaling_recv_task = tokio::spawn(async move {
+            loop {
+                let msg = {
+                    let mut conn_guard = signaling_for_recv.lock().await;
+                    // Use timeout to avoid blocking forever
+                    match tokio::time::timeout(Duration::from_millis(100), conn_guard.recv()).await
+                    {
+                        Ok(Ok(msg)) => Some(msg),
+                        Ok(Err(_)) => None, // Connection error
+                        Err(_) => None,     // Timeout
+                    }
+                };
+
+                if let Some(msg) = msg {
+                    if tx_signaling.send(msg).await.is_err() {
+                        break;
+                    }
+                }
+
+                // Small delay to avoid busy loop
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        });
+
+        // Setup stdin reader
+        let stdin = tokio::io::stdin();
+        let mut stdin_reader = BufReader::new(stdin).lines();
+
+        // Store peer info for chat
+        let my_peer_id_for_chat = my_peer_id.to_string();
+        let peer_name_for_chat = peer_name.clone();
+
+        // Process received audio and chat on main thread using select
         let mut received_count = 0u64;
         loop {
             tokio::select! {
@@ -666,10 +781,49 @@ async fn run_join_room(
                         tracing::debug!("Received {} audio packets for playback", received_count);
                     }
                 }
+                Some(msg) = rx_signaling.recv() => {
+                    // Skip our own chat messages to avoid duplicate display
+                    if let SignalingMessage::ChatMessage { sender_id, .. } = &msg {
+                        if sender_id == &my_peer_id_for_chat {
+                            continue;
+                        }
+                    }
+                    handle_signaling_event(&msg);
+                }
+                line_result = stdin_reader.next_line() => {
+                    match line_result {
+                        Ok(Some(line)) => {
+                            let line = line.trim();
+                            if !line.is_empty() {
+                                let mut conn_guard = signaling_conn_arc.lock().await;
+                                if let Err(e) = send_chat_message(
+                                    &mut conn_guard,
+                                    &my_peer_id_for_chat,
+                                    &peer_name_for_chat,
+                                    line,
+                                ).await {
+                                    warn!("Failed to send chat: {}", e);
+                                } else {
+                                    println!("💬 You: {}", line);
+                                }
+                            }
+                            print!("chat> ");
+                            let _ = std::io::Write::flush(&mut std::io::stdout());
+                        }
+                        Ok(None) => {
+                            // EOF
+                            info!("stdin closed");
+                        }
+                        Err(e) => {
+                            warn!("stdin error: {}", e);
+                        }
+                    }
+                }
             }
         }
 
         send_task.abort();
+        signaling_recv_task.abort();
 
         let (stats, peer_latency_info) = {
             let mut conn = connection_arc.lock().await;
@@ -689,14 +843,178 @@ async fn run_join_room(
             peer_latency_info.as_ref(),
             Some(&peer_display_name),
         );
-    } else {
-        println!("\nNo peers with addresses found in room. Waiting for peers...");
-        println!("Press Ctrl+C to exit.\n");
-        tokio::signal::ctrl_c().await?;
-    }
 
-    // Leave room
-    let _ = conn.send(SignalingMessage::LeaveRoom).await;
+        // Leave room
+        {
+            let mut conn_guard = signaling_conn_arc.lock().await;
+            let _ = conn_guard.send(SignalingMessage::LeaveRoom).await;
+        }
+
+        return Ok(());
+    } else {
+        // Chat-only mode (no audio connection)
+        if chat_only {
+            println!("\n📝 Chat-only mode (no audio connection)");
+        } else {
+            println!("\nNo peers with addresses found in room. Waiting for peers...");
+        }
+
+        // Channel for signaling events
+        let (tx_signaling, mut rx_signaling) = tokio::sync::mpsc::channel::<SignalingMessage>(32);
+
+        // Wrap signaling connection
+        let signaling_conn_arc = Arc::new(tokio::sync::Mutex::new(conn));
+        let signaling_for_recv = signaling_conn_arc.clone();
+
+        // Spawn task to poll signaling events
+        let signaling_recv_task = tokio::spawn(async move {
+            loop {
+                let msg = {
+                    let mut conn_guard = signaling_for_recv.lock().await;
+                    match tokio::time::timeout(Duration::from_millis(100), conn_guard.recv()).await
+                    {
+                        Ok(Ok(msg)) => Some(msg),
+                        Ok(Err(_)) => None,
+                        Err(_) => None,
+                    }
+                };
+
+                if let Some(msg) = msg {
+                    if tx_signaling.send(msg).await.is_err() {
+                        break;
+                    }
+                }
+
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        });
+
+        let my_peer_id_for_chat = my_peer_id.to_string();
+        let peer_name_for_chat = peer_name.clone();
+
+        // Non-interactive mode: send message and wait for response
+        if let Some(msg_to_send) = message {
+            println!("📤 Sending: {}", msg_to_send);
+
+            {
+                let mut conn_guard = signaling_conn_arc.lock().await;
+                send_chat_message(
+                    &mut conn_guard,
+                    &my_peer_id_for_chat,
+                    &peer_name_for_chat,
+                    &msg_to_send,
+                )
+                .await?;
+            }
+
+            // Wait for response with timeout
+            let timeout_duration = Duration::from_secs(timeout_secs);
+            let start = std::time::Instant::now();
+            let mut received_response = false;
+
+            println!("⏳ Waiting for response (timeout: {}s)...", timeout_secs);
+
+            loop {
+                if start.elapsed() > timeout_duration {
+                    if !received_response {
+                        println!("⚠️  Timeout: no response received");
+                    }
+                    break;
+                }
+
+                tokio::select! {
+                    Some(msg) = rx_signaling.recv() => {
+                        if let SignalingMessage::ChatMessage { sender_id, sender_name, content, .. } = &msg {
+                            // Skip our own messages to avoid duplicate display
+                            if sender_id != &my_peer_id_for_chat {
+                                println!("📥 {}: {}", sender_name, content);
+                                received_response = true;
+                                // Give a small window for additional messages
+                                tokio::time::sleep(Duration::from_millis(500)).await;
+                            }
+                        } else {
+                            handle_signaling_event(&msg);
+                        }
+                    }
+                    _ = tokio::time::sleep(Duration::from_millis(100)) => {}
+                }
+            }
+
+            signaling_recv_task.abort();
+
+            // Leave room
+            {
+                let mut conn_guard = signaling_conn_arc.lock().await;
+                let _ = conn_guard.send(SignalingMessage::LeaveRoom).await;
+            }
+
+            return Ok(());
+        }
+
+        // Interactive mode
+        println!("\n💬 Chat enabled. Type a message and press Enter to send.");
+        println!("Press Ctrl+C to exit.\n");
+        print!("chat> ");
+        let _ = std::io::Write::flush(&mut std::io::stdout());
+
+        // Setup stdin reader
+        let stdin = tokio::io::stdin();
+        let mut stdin_reader = BufReader::new(stdin).lines();
+
+        loop {
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {
+                    info!("Shutting down...");
+                    break;
+                }
+                Some(msg) = rx_signaling.recv() => {
+                    // Skip our own chat messages to avoid duplicate display
+                    if let SignalingMessage::ChatMessage { sender_id, .. } = &msg {
+                        if sender_id == &my_peer_id_for_chat {
+                            continue;
+                        }
+                    }
+                    handle_signaling_event(&msg);
+                }
+                line_result = stdin_reader.next_line() => {
+                    match line_result {
+                        Ok(Some(line)) => {
+                            let line = line.trim();
+                            if !line.is_empty() {
+                                let mut conn_guard = signaling_conn_arc.lock().await;
+                                if let Err(e) = send_chat_message(
+                                    &mut conn_guard,
+                                    &my_peer_id_for_chat,
+                                    &peer_name_for_chat,
+                                    line,
+                                ).await {
+                                    warn!("Failed to send chat: {}", e);
+                                } else {
+                                    println!("💬 You: {}", line);
+                                }
+                            }
+                            print!("chat> ");
+                            let _ = std::io::Write::flush(&mut std::io::stdout());
+                        }
+                        Ok(None) => {
+                            info!("stdin closed");
+                        }
+                        Err(e) => {
+                            warn!("stdin error: {}", e);
+                        }
+                    }
+                }
+            }
+        }
+
+        signaling_recv_task.abort();
+
+        // Leave room
+        {
+            let mut conn_guard = signaling_conn_arc.lock().await;
+            let _ = conn_guard.send(SignalingMessage::LeaveRoom).await;
+        }
+    }
 
     Ok(())
 }
@@ -747,6 +1065,9 @@ async fn main() -> Result<()> {
             frame_size,
             input_device,
             output_device,
+            message,
+            timeout,
+            chat_only,
         } => {
             run_join_room(
                 server,
@@ -756,6 +1077,9 @@ async fn main() -> Result<()> {
                 frame_size,
                 input_device,
                 output_device,
+                message,
+                timeout,
+                chat_only,
             )
             .await?;
         }

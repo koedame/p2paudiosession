@@ -280,6 +280,12 @@ where
                     let should_send = match &msg {
                         SignalingMessage::PeerJoined { peer } => Some(peer.id) != current_peer_id,
                         SignalingMessage::PeerUpdated { peer } => Some(peer.id) != current_peer_id,
+                        // Skip own chat messages to avoid duplicate display
+                        SignalingMessage::ChatMessage { sender_id, .. } => {
+                            let my_id = current_peer_id.map(|id| id.to_string());
+                            let is_own = my_id.as_ref() == Some(sender_id);
+                            !is_own
+                        }
                         _ => true,
                     };
 
