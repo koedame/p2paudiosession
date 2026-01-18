@@ -82,11 +82,9 @@ export function MixerConsole({
 
   const [participantStates, setParticipantStates] = useState<Map<string, ChannelState>>(new Map());
 
-  const [masterState, setMasterState] = useState<ChannelState>({
+  const [masterState, setMasterState] = useState<Omit<ChannelState, 'isMuted' | 'isSoloed'>>({
     volume: 80,
     pan: 0,
-    isMuted: false,
-    isSoloed: false,
   });
 
   // Sync input mute state with prop
@@ -227,10 +225,6 @@ export function MixerConsole({
     onMasterPanChange?.(pan);
   }, [onMasterPanChange]);
 
-  // Handle master mute toggle
-  const handleMasterMuteToggle = useCallback(() => {
-    setMasterState((prev) => ({ ...prev, isMuted: !prev.isMuted }));
-  }, []);
 
   return (
     <div className="mixer-console">
@@ -295,11 +289,10 @@ export function MixerConsole({
           level={masterLevel}
           volume={masterState.volume}
           pan={masterState.pan}
-          isMuted={masterState.isMuted}
+          isMuted={false}
           color="#7c5cff"
           onVolumeChange={handleMasterVolumeChange}
           onPanChange={handleMasterPanChange}
-          onMuteToggle={handleMasterMuteToggle}
         />
       </div>
     </div>
